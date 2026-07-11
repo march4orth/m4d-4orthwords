@@ -564,6 +564,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const scoreEl = document.getElementById("score");
   const wordStagingEl = document.getElementById("word-staging");
   const clearWordBtn = document.getElementById("clear-word");
+  const shuffleBoardBtn = document.getElementById("shuffle-board");
   const submitBtn = document.getElementById("submit-word");
   const foundListEl = document.getElementById("found-words");
   const feedbackEl = document.getElementById("feedback");
@@ -605,6 +606,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const matchSummaryCpuLongestEl = document.getElementById("match-summary-cpu-longest");
   const matchSummaryRoundsEl = document.getElementById("match-summary-rounds");
   const matchPlayAgainBtn = document.getElementById("match-play-again");
+  const matchQuitBtn = document.getElementById("match-quit");
   const scoreboardEl = document.getElementById("scoreboard");
   const gameplaySectionsEl = document.getElementById("gameplay-sections");
   const dailyLockedNoticeEl = document.getElementById("daily-locked-notice");
@@ -631,9 +633,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let lastTileCount = 0;
 
+  // `displayOrder[slotIndex]` = the underlying GameState.tiles index shown in
+  // that visual slot. Purely cosmetic — shuffling it never touches
+  // GameState.tiles, so scoring/validation/daily-determinism are unaffected.
+  // Defaults to identity order and is reset on every new round.
+  let displayOrder = Array.from({ length: TILE_COUNT }, (_, i) => i);
+
+  function resetDisplayOrder() {
+    displayOrder = Array.from({ length: TILE_COUNT }, (_, i) => i);
+  }
+
   function renderTiles() {
-    tileEls.forEach((el, i) => {
-      const letter = GameState.tiles[i];
+    tileEls.forEach((el, slot) => {
+      const tileIndex = displayOrder[slot];
+      const letter = GameState.tiles[tileIndex];
       el.textContent = letter || "";
       el.classList.toggle("tile-filled", Boolean(letter));
     });
@@ -645,6 +658,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (vowelBtn) vowelBtn.disabled = remaining === 0 || GameState.vowelBag.length === 0;
     if (consonantBtn) consonantBtn.disabled = remaining === 0 || GameState.consonantBag.length === 0;
     if (autoFillBtn) autoFillBtn.disabled = remaining === 0;
+    if (shuffleBoardBtn) shuffleBoardBtn.disabled = GameState.tiles.length === 0;
   }
 
   let lastRenderedTime = ROUND_SECONDS;
@@ -723,8 +737,8 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    tileEls.forEach((el, i) => {
-      el.classList.toggle("tile-selected", selectedIndices.includes(i));
+    tileEls.forEach((el, slot) => {
+      el.classList.toggle("tile-selected", selectedIndices.includes(displayOrder[slot]));
     });
 
     const hasLetters = selectedIndices.length > 0;
@@ -756,9 +770,21 @@ document.addEventListener("DOMContentLoaded", () => {
     renderStaging();
   }
 
-  tileEls.forEach((el, i) => {
-    el.addEventListener("click", () => handleTileTap(i));
+  tileEls.forEach((el, slot) => {
+    el.addEventListener("click", () => handleTileTap(displayOrder[slot]));
   });
+
+  // Visually reorders the tiles on screen (does not touch GameState.tiles,
+  // so scoring/validation/the daily-challenge letter sequence are untouched)
+  // — helps break word-blindness without giving anyone new letters.
+  function shuffleBoard() {
+    if (GameState.tiles.length === 0) return;
+    displayOrder = shuffle(displayOrder);
+    renderTiles();
+    renderStaging();
+  }
+
+  if (shuffleBoardBtn) shuffleBoardBtn.addEventListener("click", shuffleBoard);
 
   GameState.on("onBoardFull", (tiles) => {
     clearStaging();
@@ -907,6 +933,17 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (e.key === "Backspace" && selectedIndices.length > 0) {
       e.preventDefault();
       deselectTileByPosition(selectedIndices[selectedIndices.length - 1]);
+    } else if (/^[a-z]$/i.test(e.key) && GameState.roundActive) {
+      // Typed-letter shortcut: find an unselected board tile with this
+      // letter (lowest index first) and tap it, same as a click would.
+      const letter = e.key.toUpperCase();
+      const tileIndex = GameState.tiles.findIndex(
+        (l, i) => l === letter && !selectedIndices.includes(i)
+      );
+      if (tileIndex !== -1) {
+        e.preventDefault();
+        handleTileTap(tileIndex);
+      }
     }
   });
 
@@ -1164,6 +1201,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     GameState.newRound(mode);
+    resetDisplayOrder();
     renderTiles();
     if (timerEl) timerEl.classList.remove("timer-warning");
     renderTimer(ROUND_SECONDS);
@@ -1190,6 +1228,17 @@ document.addEventListener("DOMContentLoaded", () => {
   // "Change Mode" (scoreboard) always returns to mode-select, respecting
   // today's daily lock if the player switches back to Daily.
   if (newRoundBtn) newRoundBtn.addEventListener("click", showModeSelect);
+
+  // "Quit" on the 1v1 match status bar — same escape hatch as "Change Mode",
+  // just surfaced during vs-CPU rounds where there was previously no way
+  // back to mode select without finishing the match.
+  if (matchQuitBtn) {
+    matchQuitBtn.addEventListener("click", () => {
+      GameState.stopTimer();
+      GameState.roundActive = false;
+      showModeSelect();
+    });
+  }
 
   // "Play Again" restarts whatever mode the just-finished round was in.
   if (playAgainBtn) {
@@ -1307,6 +1356,28 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (shareResultBtn) shareResultBtn.addEventListener("click", shareResult);
+
+  // Automated midnight reset: if the calendar date flips while the tab is
+  // open (or was open in the background), catch up on refocus rather than
+  // requiring a hard refresh. Only touches the screen if we're sitting on
+  // the daily-locked notice showing a stale (yesterday's) result — never
+  // interrupts a round already in progress.
+  let lastSeenDate = todayDateString();
+  function checkForDateRollover() {
+    const today = todayDateString();
+    if (today === lastSeenDate) return;
+    lastSeenDate = today;
+    if (GameState.roundActive) return;
+    const dailyLockedVisible = dailyLockedNoticeEl && !dailyLockedNoticeEl.classList.contains("hidden");
+    if (dailyLockedVisible && !Stats.hasPlayedDailyToday()) {
+      showModeSelect();
+    }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForDateRollover();
+  });
+  window.addEventListener("focus", checkForDateRollover);
 
   if (Stats.hasPlayedDailyToday()) {
     showDailyLocked();

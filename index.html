@@ -68,6 +68,12 @@
         <div class="text-[0.6rem] sm:text-xs uppercase tracking-widest" style="color: var(--color-feedback-danger);">CPU</div>
         <div id="match-cpu-score" class="font-display text-lg sm:text-xl">0</div>
       </div>
+      <button
+        id="match-quit"
+        class="btn-navy px-3 py-2 sm:px-4 rounded-full text-xs sm:text-sm font-semibold uppercase tracking-wide whitespace-nowrap"
+      >
+        Quit
+      </button>
     </section>
 
     <!-- Scoreboard -->
@@ -158,6 +164,13 @@
             class="btn-navy px-4 sm:px-6 py-3 rounded-lg font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
           >
             Clear
+          </button>
+          <button
+            id="shuffle-board"
+            aria-label="Shuffle board"
+            class="btn-navy px-4 sm:px-6 py-3 rounded-lg font-bold uppercase tracking-wide whitespace-nowrap"
+          >
+            🔀 Shuffle
           </button>
           <button
             id="submit-word"
