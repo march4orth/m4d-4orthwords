@@ -1,0 +1,35 @@
+name: Deploy to cPanel via FTP
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  ftp-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # If this is a built app (React/Vite/etc.), add your build steps here, e.g.:
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: 20
+      # - run: npm ci
+      # - run: npm run build
+
+      - name: FTP Deploy
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          # Set this to the folder that contains what should be uploaded.
+          # Use "./" for a plain static site at the repo root, or "dist/"
+          # / "build/" if a build step above produces output there.
+          local-dir: ./
+          # Leave as ./ if the FTP account's home directory is already
+          # scoped to the subdomain's document root (recommended in cPanel).
+          server-dir: ./
