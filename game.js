@@ -573,6 +573,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const finalWordsEl = document.getElementById("final-words");
   const rejectedSectionEl = document.getElementById("rejected-words-section");
   const rejectedListEl = document.getElementById("rejected-words");
+  const missedSectionEl = document.getElementById("missed-words-section");
+  const missedListEl = document.getElementById("missed-words");
   const bestWordEl = document.getElementById("best-word");
   const muteToggleBtn = document.getElementById("mute-toggle");
   const muteIconEl = document.getElementById("mute-icon");
@@ -592,11 +594,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const matchRoundPlayerScoreEl = document.getElementById("match-round-player-score");
   const matchRoundCpuScoreEl = document.getElementById("match-round-cpu-score");
   const matchRoundVerdictEl = document.getElementById("match-round-verdict");
+  const matchRoundMissedSectionEl = document.getElementById("match-round-missed-section");
+  const matchRoundMissedEl = document.getElementById("match-round-missed");
   const matchRoundContinueBtn = document.getElementById("match-round-continue");
   const matchSummaryPanel = document.getElementById("match-summary-panel");
   const matchSummaryTitleEl = document.getElementById("match-summary-title");
   const matchSummaryPlayerScoreEl = document.getElementById("match-summary-player-score");
   const matchSummaryCpuScoreEl = document.getElementById("match-summary-cpu-score");
+  const matchSummaryPlayerLongestEl = document.getElementById("match-summary-player-longest");
+  const matchSummaryCpuLongestEl = document.getElementById("match-summary-cpu-longest");
   const matchSummaryRoundsEl = document.getElementById("match-summary-rounds");
   const matchPlayAgainBtn = document.getElementById("match-play-again");
   const scoreboardEl = document.getElementById("scoreboard");
@@ -795,7 +801,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (consonantBtn) consonantBtn.disabled = true;
 
     if (mode === "vs-cpu") {
-      handleMatchRoundEnd(score, words);
+      handleMatchRoundEnd(score, words, tiles);
       return;
     }
 
@@ -849,6 +855,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (bestWordEl) {
       bestWordEl.textContent = bestWord ? bestWord.toUpperCase() : "None found";
+    }
+
+    if (missedSectionEl && missedListEl) {
+      const foundSet = new Set(words);
+      const missed = findAllWords(tiles)
+        .filter((w) => !foundSet.has(w))
+        .slice(0, 5);
+      missedListEl.innerHTML = "";
+      if (missed.length === 0) {
+        missedSectionEl.classList.add("hidden");
+      } else {
+        missedSectionEl.classList.remove("hidden");
+        missed.forEach((w) => {
+          const li = document.createElement("li");
+          li.textContent = `${w.toUpperCase()} (+${scoreForWord(w)})`;
+          missedListEl.appendChild(li);
+        });
+      }
     }
   });
 
@@ -985,16 +1009,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Winner across the whole match: highest cumulative score; if tied,
     // whoever's single longest word (across all rounds) was longer.
+    // Longest word either side found across the whole match (all rounds).
+    longestOf(key) {
+      return this.history.reduce((best, r) => {
+        const w = r[key];
+        return w && w.length > (best?.length || 0) ? w : best;
+      }, null);
+    },
+
     winner() {
       if (this.playerTotal > this.cpuTotal) return "player";
       if (this.cpuTotal > this.playerTotal) return "cpu";
-      const longestOf = (key) =>
-        this.history.reduce((best, r) => {
-          const w = r[key];
-          return w && w.length > (best?.length || 0) ? w : best;
-        }, null);
-      const playerLongest = longestOf("playerLongest");
-      const cpuLongest = longestOf("cpuLongest");
+      const playerLongest = this.longestOf("playerLongest");
+      const cpuLongest = this.longestOf("cpuLongest");
       const pLen = playerLongest ? playerLongest.length : 0;
       const cLen = cpuLongest ? cpuLongest.length : 0;
       if (pLen > cLen) return "player";
@@ -1009,7 +1036,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (matchCpuScoreEl) matchCpuScoreEl.textContent = String(Match.cpuTotal);
   }
 
-  function handleMatchRoundEnd(playerScore, playerWords) {
+  function handleMatchRoundEnd(playerScore, playerWords, tiles) {
     // The CPU's simulated finds are scheduled across the full round
     // duration, so by the time the timer hits zero it has already
     // finished — stop() here is just a safety net.
@@ -1035,6 +1062,27 @@ document.addEventListener("DOMContentLoaded", () => {
       matchRoundContinueBtn.textContent = Match.isLastRound() ? "See Result" : "Next Round";
     }
 
+    // Words neither side found — a neutral "left on the table" list rather
+    // than surfacing the CPU's specific winning words, which would just
+    // read as a spoiler of how it beat you.
+    if (matchRoundMissedSectionEl && matchRoundMissedEl) {
+      const foundByEither = new Set([...playerWords, ...cpuWords]);
+      const missed = findAllWords(tiles)
+        .filter((w) => !foundByEither.has(w))
+        .slice(0, 5);
+      matchRoundMissedEl.innerHTML = "";
+      if (missed.length === 0) {
+        matchRoundMissedSectionEl.classList.add("hidden");
+      } else {
+        matchRoundMissedSectionEl.classList.remove("hidden");
+        missed.forEach((w) => {
+          const li = document.createElement("li");
+          li.textContent = `${w.toUpperCase()} (+${scoreForWord(w)})`;
+          matchRoundMissedEl.appendChild(li);
+        });
+      }
+    }
+
     renderMatchStatus();
     if (matchRoundPanel) matchRoundPanel.classList.remove("hidden");
   }
@@ -1047,6 +1095,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (matchSummaryPlayerScoreEl) matchSummaryPlayerScoreEl.textContent = String(Match.playerTotal);
     if (matchSummaryCpuScoreEl) matchSummaryCpuScoreEl.textContent = String(Match.cpuTotal);
+
+    const playerLongest = Match.longestOf("playerLongest");
+    const cpuLongest = Match.longestOf("cpuLongest");
+    if (matchSummaryPlayerLongestEl) {
+      matchSummaryPlayerLongestEl.textContent = playerLongest ? playerLongest.toUpperCase() : "—";
+    }
+    if (matchSummaryCpuLongestEl) {
+      matchSummaryCpuLongestEl.textContent = cpuLongest ? cpuLongest.toUpperCase() : "—";
+    }
 
     if (matchSummaryRoundsEl) {
       matchSummaryRoundsEl.innerHTML = "";

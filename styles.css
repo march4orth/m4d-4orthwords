@@ -319,6 +319,17 @@ body {
   font-size: 0.8rem;
 }
 
+#missed-words li,
+#match-round-missed li {
+  background: rgba(255, 107, 74, 0.12);
+  border: 1px solid rgba(255, 107, 74, 0.4);
+  color: var(--color-feedback-warning);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
 .corner-controls {
   position: fixed;
   bottom: var(--space-3);
