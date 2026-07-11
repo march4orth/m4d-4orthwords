@@ -24,8 +24,30 @@
 
   <main class="w-full max-w-3xl flex flex-col items-center gap-6 pb-16 sm:pb-4">
 
+    <!-- Mode select -->
+    <section id="mode-select" class="w-full panel px-4 py-6 sm:px-8 sm:py-8 text-center">
+      <h2 class="font-display text-xl sm:text-2xl mb-1" style="color: var(--color-gold-400);">Choose a Mode</h2>
+      <p class="text-xs sm:text-sm mb-6" style="color: var(--color-text-muted);">Pick your game before drawing letters.</p>
+      <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+        <button
+          id="mode-practice"
+          class="btn-navy flex-1 px-4 py-4 rounded-lg text-left"
+        >
+          <span class="block font-display text-base sm:text-lg mb-1">Infinite Practice</span>
+          <span class="block text-xs opacity-80 normal-case tracking-normal font-normal">Random letters, play as many rounds as you like.</span>
+        </button>
+        <button
+          id="mode-daily"
+          class="btn-gold flex-1 px-4 py-4 rounded-lg text-left"
+        >
+          <span class="block font-display text-base sm:text-lg mb-1">Daily Challenge</span>
+          <span class="block text-xs opacity-80 normal-case tracking-normal font-normal">Same 9 letters worldwide. One attempt per day.</span>
+        </button>
+      </div>
+    </section>
+
     <!-- Scoreboard -->
-    <section class="w-full flex justify-between items-center gap-2 panel px-3 py-3 sm:px-6 sm:py-4">
+    <section id="scoreboard" class="hidden w-full flex justify-between items-center gap-2 panel px-3 py-3 sm:px-6 sm:py-4">
       <div class="text-center">
         <div class="text-[0.65rem] sm:text-xs uppercase tracking-widest" style="color: var(--color-text-onpanel); opacity: 0.7;">Score</div>
         <div id="score" class="font-display text-2xl sm:text-3xl" style="color: var(--color-gold-400);">0</div>
@@ -41,69 +63,82 @@
         id="new-round"
         class="btn-gold px-3 py-2 sm:px-4 rounded-full text-xs sm:text-sm font-semibold uppercase tracking-wide whitespace-nowrap"
       >
-        New Round
+        Change Mode
       </button>
     </section>
 
-    <!-- Tile board -->
-    <section class="w-full panel px-3 py-5 sm:px-6 sm:py-8">
-      <div class="tile-board grid grid-cols-9 gap-1 sm:gap-3 mb-6 sm:mb-8">
-        <div data-tile-slot class="tile"></div>
-        <div data-tile-slot class="tile"></div>
-        <div data-tile-slot class="tile"></div>
-        <div data-tile-slot class="tile"></div>
-        <div data-tile-slot class="tile"></div>
-        <div data-tile-slot class="tile"></div>
-        <div data-tile-slot class="tile"></div>
-        <div data-tile-slot class="tile"></div>
-        <div data-tile-slot class="tile"></div>
-      </div>
-
-      <div class="flex justify-center gap-2 sm:gap-4">
-        <button
-          id="pick-vowel"
-          class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
-        >
-          Vowel
-        </button>
-        <button
-          id="pick-consonant"
-          class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
-        >
-          Consonant
-        </button>
-      </div>
+    <!-- Daily already-played lock notice -->
+    <section id="daily-locked-notice" class="hidden w-full panel px-4 py-5 sm:px-6 sm:py-6 text-center">
+      <h3 class="font-display text-base sm:text-lg mb-1" style="color: var(--color-gold-400);">Today's Challenge Complete</h3>
+      <p class="text-xs sm:text-sm mb-4" style="color: var(--color-text-muted);">
+        You scored <strong id="daily-locked-score" style="color: var(--color-gold-400);">0</strong> today.
+        Come back tomorrow for a new puzzle, or play Infinite Practice in the meantime.
+      </p>
+      <div id="daily-locked-tiles" class="tile-board grid grid-cols-9 gap-1 sm:gap-2 mb-4"></div>
+      <ul id="daily-locked-words" class="flex flex-wrap gap-2 justify-center text-sm"></ul>
     </section>
 
-    <!-- Word entry -->
-    <section class="w-full panel px-3 py-4 sm:px-6 sm:py-6">
-      <div class="flex gap-2 sm:gap-3">
-        <input
-          id="word-input"
-          type="text"
-          autocomplete="off"
-          autocapitalize="characters"
-          spellcheck="false"
-          disabled
-          placeholder="Pick 9 letters to begin..."
-          class="word-input min-w-0 flex-1 border-2 rounded-lg px-3 py-3 sm:px-4 text-base sm:text-xl tracking-widest uppercase outline-none transition-colors disabled:opacity-50"
-        />
-        <button
-          id="submit-word"
-          disabled
-          class="btn-gold px-4 sm:px-6 py-3 rounded-lg font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-        >
-          Enter
-        </button>
-      </div>
-      <p id="feedback" class="feedback-info mt-3 text-sm min-h-[1.25rem]"></p>
-    </section>
+    <div id="gameplay-sections" class="hidden w-full flex flex-col items-center gap-6">
+      <!-- Tile board -->
+      <section class="w-full panel px-3 py-5 sm:px-6 sm:py-8">
+        <div class="tile-board grid grid-cols-9 gap-1 sm:gap-3 mb-6 sm:mb-8">
+          <div data-tile-slot class="tile"></div>
+          <div data-tile-slot class="tile"></div>
+          <div data-tile-slot class="tile"></div>
+          <div data-tile-slot class="tile"></div>
+          <div data-tile-slot class="tile"></div>
+          <div data-tile-slot class="tile"></div>
+          <div data-tile-slot class="tile"></div>
+          <div data-tile-slot class="tile"></div>
+          <div data-tile-slot class="tile"></div>
+        </div>
 
-    <!-- Found words -->
-    <section class="w-full panel px-3 py-4 sm:px-6 sm:py-6">
-      <h2 class="uppercase tracking-widest text-xs mb-3" style="color: var(--color-gold-400);">Words Found</h2>
-      <ul id="found-words" class="flex flex-wrap gap-2 text-sm"></ul>
-    </section>
+        <div class="flex justify-center gap-2 sm:gap-4">
+          <button
+            id="pick-vowel"
+            class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
+          >
+            Vowel
+          </button>
+          <button
+            id="pick-consonant"
+            class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
+          >
+            Consonant
+          </button>
+        </div>
+      </section>
+
+      <!-- Word entry -->
+      <section class="w-full panel px-3 py-4 sm:px-6 sm:py-6">
+        <div class="flex gap-2 sm:gap-3">
+          <input
+            id="word-input"
+            type="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            disabled
+            placeholder="Pick 9 letters to begin..."
+            class="word-input min-w-0 flex-1 border-2 rounded-lg px-3 py-3 sm:px-4 text-base sm:text-xl tracking-widest uppercase outline-none transition-colors disabled:opacity-50"
+          />
+          <button
+            id="submit-word"
+            disabled
+            class="btn-gold px-4 sm:px-6 py-3 rounded-lg font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            Enter
+          </button>
+        </div>
+        <p id="feedback" class="feedback-info mt-3 text-sm min-h-[1.25rem]"></p>
+      </section>
+
+      <!-- Found words -->
+      <section class="w-full panel px-3 py-4 sm:px-6 sm:py-6">
+        <h2 class="uppercase tracking-widest text-xs mb-3" style="color: var(--color-gold-400);">Words Found</h2>
+        <ul id="found-words" class="flex flex-wrap gap-2 text-sm"></ul>
+      </section>
+    </div>
 
   </main>
 
@@ -163,6 +198,49 @@
     </div>
   </div>
 
+  <!-- Stats overlay -->
+  <div
+    id="stats-panel"
+    class="hidden fixed inset-0 backdrop-blur-sm flex items-center justify-center px-4 py-8 z-50 overflow-y-auto"
+    style="background: var(--color-surface-overlay);"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="stats-title"
+  >
+    <div class="panel px-5 py-8 sm:px-8 sm:py-10 max-w-md w-full my-auto text-left relative">
+      <button
+        id="stats-close"
+        type="button"
+        aria-label="Close"
+        class="corner-icon-btn help-close-btn"
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
+
+      <h2 id="stats-title" class="font-display text-2xl sm:text-3xl mb-6 text-center" style="color: var(--color-gold-400);">Your Stats</h2>
+
+      <div class="grid grid-cols-3 gap-3 mb-6">
+        <div class="panel px-2 py-3 text-center" style="background: var(--color-surface-input);">
+          <div id="stat-games-played" class="font-display text-2xl" style="color: var(--color-gold-400);">0</div>
+          <div class="text-[0.6rem] uppercase tracking-widest mt-1" style="color: var(--color-text-muted);">Games</div>
+        </div>
+        <div class="panel px-2 py-3 text-center" style="background: var(--color-surface-input);">
+          <div id="stat-streak" class="font-display text-2xl" style="color: var(--color-gold-400);">0</div>
+          <div class="text-[0.6rem] uppercase tracking-widest mt-1" style="color: var(--color-text-muted);">Day Streak</div>
+        </div>
+        <div class="panel px-2 py-3 text-center" style="background: var(--color-surface-input);">
+          <div id="stat-best-points" class="font-display text-2xl" style="color: var(--color-gold-400);">0</div>
+          <div class="text-[0.6rem] uppercase tracking-widest mt-1" style="color: var(--color-text-muted);">Top Word Pts</div>
+        </div>
+      </div>
+
+      <div class="panel px-4 py-3 text-center" style="background: var(--color-surface-input);">
+        <h3 class="text-xs uppercase tracking-widest mb-1" style="color: var(--color-gold-400);">Best Word Ever</h3>
+        <div id="stat-best-word" class="font-display text-2xl tracking-wide">—</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Round Review overlay -->
   <div
     id="results-panel"
@@ -189,17 +267,33 @@
         <div id="best-word" class="font-display text-2xl tracking-wide"></div>
       </div>
 
-      <button
-        id="play-again"
-        onclick="document.getElementById('new-round').click()"
-        class="btn-gold px-6 sm:px-8 py-3 rounded-full font-bold uppercase tracking-wide"
-      >
-        Play Again
-      </button>
+      <div class="flex flex-col gap-3">
+        <button
+          id="share-result"
+          class="btn-navy px-6 sm:px-8 py-3 rounded-full font-bold uppercase tracking-wide"
+        >
+          Share Result
+        </button>
+        <button
+          id="play-again"
+          class="btn-gold px-6 sm:px-8 py-3 rounded-full font-bold uppercase tracking-wide"
+        >
+          Play Again
+        </button>
+      </div>
     </div>
   </div>
 
   <div class="corner-controls">
+    <button
+      id="stats-toggle"
+      type="button"
+      aria-label="Stats"
+      aria-haspopup="dialog"
+      class="corner-icon-btn"
+    >
+      <span aria-hidden="true">📊</span>
+    </button>
     <button
       id="help-toggle"
       type="button"

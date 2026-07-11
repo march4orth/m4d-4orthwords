@@ -149,11 +149,142 @@ function buildBag(pool) {
   return bag;
 }
 
+// Draws from the front of an already-shuffled bag (splice(0,1) — not a
+// random index) so that, for a seeded/pre-shuffled daily bag, the Nth
+// pick of a given type is deterministic: every player who clicks the
+// same Vowel/Consonant sequence gets the same letters in the same order.
 function drawFrom(bag) {
   if (bag.length === 0) return null;
-  const index = Math.floor(Math.random() * bag.length);
-  return bag.splice(index, 1)[0];
+  return bag.splice(0, 1)[0];
 }
+
+// mulberry32 — small, fast, seedable PRNG. Deterministic: the same
+// 32-bit seed always produces the same output sequence, which is what
+// makes the Daily Challenge reproducible across every player's browser.
+function mulberry32(seed) {
+  let a = seed;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Derives a 32-bit integer seed from a date string like "2026-07-11" —
+// stable across sessions/devices as long as the calendar date matches.
+function seedFromDateString(dateStr) {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = (Math.imul(31, hash) + dateStr.charCodeAt(i)) | 0;
+  }
+  return hash;
+}
+
+function todayDateString() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// Fisher-Yates shuffle driven by an injectable RNG — `rng` defaults to
+// Math.random for normal play, or a seeded mulberry32() for the daily bag.
+function shuffle(arr, rng = Math.random) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ---- Stats + Daily Challenge persistence ----
+// All state lives in a single localStorage record so a corrupted/missing
+// key degrades to sensible defaults rather than throwing.
+
+const STATS_KEY = "4orthwords-stats";
+
+function defaultStats() {
+  return {
+    gamesPlayed: 0,
+    bestWord: null, // { word, points }
+    streak: 0,
+    lastDailyDate: null, // last calendar date the daily challenge was completed
+    lastDailyResult: null, // { score, words, tiles, timeLeft } for the locked replay view
+  };
+}
+
+const Stats = (() => {
+  let data = load();
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STATS_KEY);
+      if (!raw) return defaultStats();
+      const parsed = JSON.parse(raw);
+      return { ...defaultStats(), ...parsed };
+    } catch (e) {
+      return defaultStats();
+    }
+  }
+
+  function save() {
+    localStorage.setItem(STATS_KEY, JSON.stringify(data));
+  }
+
+  // Yesterday's date string, for streak continuity checks.
+  function yesterdayDateString() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return {
+    get() {
+      return data;
+    },
+
+    hasPlayedDailyToday() {
+      return data.lastDailyDate === todayDateString();
+    },
+
+    getDailyResult() {
+      return data.lastDailyResult;
+    },
+
+    // Called once per completed round (either mode). `isDaily` triggers
+    // the daily-specific bookkeeping (lock + streak).
+    recordRoundResult({ score, words, tiles, timeLeft, isDaily }) {
+      data.gamesPlayed += 1;
+
+      words.forEach((word) => {
+        const points = scoreForWord(word);
+        if (!data.bestWord || points > data.bestWord.points) {
+          data.bestWord = { word, points };
+        }
+      });
+
+      if (isDaily) {
+        const today = todayDateString();
+        if (data.lastDailyDate === yesterdayDateString()) {
+          data.streak += 1;
+        } else if (data.lastDailyDate !== today) {
+          data.streak = 1;
+        }
+        data.lastDailyDate = today;
+        data.lastDailyResult = { score, words, tiles, timeLeft };
+      }
+
+      save();
+    },
+  };
+})();
 
 const GameState = {
   vowelBag: [],
@@ -165,6 +296,8 @@ const GameState = {
   score: 0,
   foundWords: [],
   rejectedWords: [],
+  mode: "practice", // "practice" | "daily"
+  dailySeedDate: null,
 
   listeners: {
     onTilesChanged: null,
@@ -175,9 +308,20 @@ const GameState = {
     onBoardFull: null,
   },
 
-  newRound() {
-    this.vowelBag = buildBag(VOWEL_POOL);
-    this.consonantBag = buildBag(CONSONANT_POOL);
+  // `mode` is "practice" (Math.random shuffle, unlimited replays) or
+  // "daily" (shuffle seeded from today's date — same for every player
+  // who makes the same V/C pick sequence today).
+  newRound(mode = "practice") {
+    this.mode = mode;
+    let rng = Math.random;
+    if (mode === "daily") {
+      this.dailySeedDate = todayDateString();
+      rng = mulberry32(seedFromDateString(this.dailySeedDate));
+    } else {
+      this.dailySeedDate = null;
+    }
+    this.vowelBag = shuffle(buildBag(VOWEL_POOL), rng);
+    this.consonantBag = shuffle(buildBag(CONSONANT_POOL), rng);
     this.tiles = [];
     this.timeRemaining = ROUND_SECONDS;
     this.roundActive = false;
@@ -241,6 +385,8 @@ const GameState = {
       rejected: this.rejectedWords,
       bestWord,
       tiles: this.tiles.slice(),
+      timeLeft: Math.max(this.timeRemaining, 0),
+      mode: this.mode,
     });
   },
 
@@ -308,6 +454,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const helpToggleBtn = document.getElementById("help-toggle");
   const helpCloseBtn = document.getElementById("help-close");
   const helpPanel = document.getElementById("help-panel");
+  const modeSelectEl = document.getElementById("mode-select");
+  const modePracticeBtn = document.getElementById("mode-practice");
+  const modeDailyBtn = document.getElementById("mode-daily");
+  const scoreboardEl = document.getElementById("scoreboard");
+  const gameplaySectionsEl = document.getElementById("gameplay-sections");
+  const dailyLockedNoticeEl = document.getElementById("daily-locked-notice");
+  const dailyLockedScoreEl = document.getElementById("daily-locked-score");
+  const dailyLockedTilesEl = document.getElementById("daily-locked-tiles");
+  const dailyLockedWordsEl = document.getElementById("daily-locked-words");
+  const shareResultBtn = document.getElementById("share-result");
+  const playAgainBtn = document.getElementById("play-again");
+  const statsToggleBtn = document.getElementById("stats-toggle");
+  const statsCloseBtn = document.getElementById("stats-close");
+  const statsPanel = document.getElementById("stats-panel");
+  const statGamesPlayedEl = document.getElementById("stat-games-played");
+  const statStreakEl = document.getElementById("stat-streak");
+  const statBestPointsEl = document.getElementById("stat-best-points");
+  const statBestWordEl = document.getElementById("stat-best-word");
 
   const REJECTION_MESSAGES = {
     "too-short": "Too short (min. 3 letters)",
@@ -411,7 +575,9 @@ document.addEventListener("DOMContentLoaded", () => {
     renderFeedback(REJECTION_MESSAGES[reason] || "Invalid word.", "bad");
   });
 
-  GameState.on("onRoundEnd", ({ score, words, rejected, bestWord }) => {
+  let lastRoundResult = null;
+
+  GameState.on("onRoundEnd", ({ score, words, rejected, bestWord, tiles, timeLeft, mode }) => {
     AudioEngine.buzzer();
     if (wordInput) wordInput.disabled = true;
     if (submitBtn) submitBtn.disabled = true;
@@ -419,6 +585,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (consonantBtn) consonantBtn.disabled = true;
     if (resultsPanel) resultsPanel.classList.remove("hidden");
     if (finalScoreEl) finalScoreEl.textContent = String(score);
+
+    lastRoundResult = { score, words, tiles, timeLeft, mode };
+    Stats.recordRoundResult({ score, words, tiles, timeLeft, isDaily: mode === "daily" });
+    renderStats();
 
     if (finalWordsEl) {
       finalWordsEl.innerHTML = "";
@@ -503,14 +673,77 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function startNewRound() {
-    GameState.newRound();
+  function showModeSelect() {
+    if (resultsPanel) resultsPanel.classList.add("hidden");
+    if (Stats.hasPlayedDailyToday()) {
+      showDailyLocked();
+      return;
+    }
+    if (modeSelectEl) modeSelectEl.classList.remove("hidden");
+    if (scoreboardEl) scoreboardEl.classList.add("hidden");
+    if (gameplaySectionsEl) gameplaySectionsEl.classList.add("hidden");
+    if (dailyLockedNoticeEl) dailyLockedNoticeEl.classList.add("hidden");
+  }
+
+  function showDailyLocked() {
+    if (modeSelectEl) modeSelectEl.classList.remove("hidden");
+    if (scoreboardEl) scoreboardEl.classList.add("hidden");
+    if (gameplaySectionsEl) gameplaySectionsEl.classList.add("hidden");
+    if (dailyLockedNoticeEl) {
+      dailyLockedNoticeEl.classList.remove("hidden");
+      const result = Stats.getDailyResult();
+      if (dailyLockedScoreEl) dailyLockedScoreEl.textContent = String(result ? result.score : 0);
+
+      if (dailyLockedTilesEl) {
+        dailyLockedTilesEl.innerHTML = "";
+        const tiles = result ? result.tiles : [];
+        tiles.forEach((letter) => {
+          const div = document.createElement("div");
+          div.className = "tile tile-filled";
+          div.textContent = letter;
+          dailyLockedTilesEl.appendChild(div);
+        });
+      }
+
+      if (dailyLockedWordsEl) {
+        dailyLockedWordsEl.innerHTML = "";
+        const words = result ? result.words : [];
+        if (words.length === 0) {
+          const li = document.createElement("li");
+          li.textContent = "No words found today.";
+          li.style.opacity = "0.6";
+          dailyLockedWordsEl.appendChild(li);
+        } else {
+          words.forEach((w) => {
+            const li = document.createElement("li");
+            li.textContent = `${w.toUpperCase()} (+${scoreForWord(w)})`;
+            dailyLockedWordsEl.appendChild(li);
+          });
+        }
+      }
+    }
+  }
+
+  function startRound(mode) {
+    if (mode === "daily" && Stats.hasPlayedDailyToday()) {
+      showDailyLocked();
+      return;
+    }
+    if (modeSelectEl) modeSelectEl.classList.add("hidden");
+    if (dailyLockedNoticeEl) dailyLockedNoticeEl.classList.add("hidden");
+    if (scoreboardEl) scoreboardEl.classList.remove("hidden");
+    if (gameplaySectionsEl) gameplaySectionsEl.classList.remove("hidden");
+
+    GameState.newRound(mode);
     renderTiles();
     if (timerEl) timerEl.classList.remove("timer-warning");
     renderTimer(ROUND_SECONDS);
     renderScore();
     renderFoundWords();
-    renderFeedback("Pick 9 letters to begin.", "info");
+    renderFeedback(
+      mode === "daily" ? "Daily Challenge — pick 9 letters to begin." : "Pick 9 letters to begin.",
+      "info"
+    );
     if (wordInput) {
       wordInput.value = "";
       wordInput.disabled = true;
@@ -519,7 +752,20 @@ document.addEventListener("DOMContentLoaded", () => {
     if (resultsPanel) resultsPanel.classList.add("hidden");
   }
 
-  if (newRoundBtn) newRoundBtn.addEventListener("click", startNewRound);
+  if (modePracticeBtn) modePracticeBtn.addEventListener("click", () => startRound("practice"));
+  if (modeDailyBtn) modeDailyBtn.addEventListener("click", () => startRound("daily"));
+
+  // "Change Mode" (scoreboard) always returns to mode-select, respecting
+  // today's daily lock if the player switches back to Daily.
+  if (newRoundBtn) newRoundBtn.addEventListener("click", showModeSelect);
+
+  // "Play Again" restarts whatever mode the just-finished round was in.
+  if (playAgainBtn) {
+    playAgainBtn.addEventListener("click", () => {
+      const mode = lastRoundResult ? lastRoundResult.mode : "practice";
+      startRound(mode);
+    });
+  }
 
   function renderMuteState() {
     const muted = AudioEngine.isMuted();
@@ -559,5 +805,80 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  startNewRound();
+  function renderStats() {
+    const stats = Stats.get();
+    if (statGamesPlayedEl) statGamesPlayedEl.textContent = String(stats.gamesPlayed);
+    if (statStreakEl) statStreakEl.textContent = String(stats.streak);
+    if (statBestPointsEl) statBestPointsEl.textContent = String(stats.bestWord ? stats.bestWord.points : 0);
+    if (statBestWordEl) statBestWordEl.textContent = stats.bestWord ? stats.bestWord.word.toUpperCase() : "—";
+  }
+
+  function openStats() {
+    renderStats();
+    if (statsPanel) statsPanel.classList.remove("hidden");
+  }
+
+  function closeStats() {
+    if (statsPanel) statsPanel.classList.add("hidden");
+  }
+
+  if (statsToggleBtn) statsToggleBtn.addEventListener("click", openStats);
+  if (statsCloseBtn) statsCloseBtn.addEventListener("click", closeStats);
+  if (statsPanel) {
+    statsPanel.addEventListener("click", (e) => {
+      if (e.target === statsPanel) closeStats();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && statsPanel && !statsPanel.classList.contains("hidden")) {
+      closeStats();
+    }
+  });
+
+  const SITE_URL = "https://4orthwords.march4orthdesign.com/";
+
+  function buildShareText() {
+    if (!lastRoundResult) return "";
+    const { score, timeLeft, mode, words } = lastRoundResult;
+    const modeLabel = mode === "daily" ? `Daily Challenge (${todayDateString()})` : "Infinite Practice";
+    // Spoiler-free: word count and length "blocks" only, never the words themselves.
+    const blocks = words.length
+      ? words.map((w) => "🟨".repeat(Math.min(w.length, 9))).join("\n")
+      : "⬛".repeat(9);
+    return [
+      `4orthwords — ${modeLabel}`,
+      `Score: ${score} pts  •  ${words.length} word${words.length === 1 ? "" : "s"}  •  ${timeLeft}s left`,
+      blocks,
+      SITE_URL,
+    ].join("\n");
+  }
+
+  async function shareResult() {
+    const text = buildShareText();
+    if (!text) return;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (e) {
+        // User cancelled the share sheet or it failed — fall through to clipboard.
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      renderFeedback("Result copied to clipboard!", "good");
+    } catch (e) {
+      renderFeedback("Couldn't copy — try again.", "bad");
+    }
+  }
+
+  if (shareResultBtn) shareResultBtn.addEventListener("click", shareResult);
+
+  if (Stats.hasPlayedDailyToday()) {
+    showDailyLocked();
+  } else {
+    showModeSelect();
+  }
 });
