@@ -13,6 +13,16 @@
 </head>
 <body class="min-h-screen flex flex-col items-center py-6 px-3 sm:py-8 sm:px-4" style="background: var(--color-surface-page); color: var(--color-text-primary); font-family: var(--font-family-body);">
 
+  <button
+    id="mute-toggle"
+    type="button"
+    aria-label="Mute sound"
+    aria-pressed="false"
+    class="mute-toggle"
+  >
+    <span id="mute-icon" aria-hidden="true">🔊</span>
+  </button>
+
   <header class="text-center mb-6 sm:mb-8 px-2">
     <h1 class="text-3xl sm:text-5xl md:text-6xl tracking-wide title-glow leading-tight">
       ANAGRAMMATICA
@@ -30,9 +40,12 @@
         <div class="text-[0.65rem] sm:text-xs uppercase tracking-widest" style="color: var(--color-text-onpanel); opacity: 0.7;">Score</div>
         <div id="score" class="font-display text-2xl sm:text-3xl" style="color: var(--color-gold-400);">0</div>
       </div>
-      <div class="text-center">
+      <div class="text-center min-w-[4.5rem] sm:min-w-[5.5rem]">
         <div class="text-[0.65rem] sm:text-xs uppercase tracking-widest" style="color: var(--color-text-onpanel); opacity: 0.7;">Time</div>
         <div id="timer" class="text-3xl sm:text-4xl tabular-nums">30</div>
+        <div class="timer-track mt-1">
+          <div id="timer-bar" class="timer-bar"></div>
+        </div>
       </div>
       <button
         id="new-round"
@@ -104,17 +117,32 @@
 
   </main>
 
-  <!-- Results overlay -->
+  <!-- Round Review overlay -->
   <div
     id="results-panel"
-    class="hidden fixed inset-0 backdrop-blur-sm flex items-center justify-center px-4 z-50"
+    class="hidden fixed inset-0 backdrop-blur-sm flex items-center justify-center px-4 py-8 z-50 overflow-y-auto"
     style="background: var(--color-surface-overlay);"
   >
-    <div class="panel px-5 py-8 sm:px-8 sm:py-10 max-w-md w-full text-center">
-      <h2 class="font-display text-2xl sm:text-3xl mb-2" style="color: var(--color-gold-400);">Time's Up!</h2>
+    <div class="panel px-5 py-8 sm:px-8 sm:py-10 max-w-md w-full text-center my-auto">
+      <h2 class="font-display text-2xl sm:text-3xl mb-2" style="color: var(--color-gold-400);">Round Review</h2>
       <p class="text-sm uppercase tracking-widest mb-6" style="color: var(--color-text-muted);">Final Score</p>
       <div id="final-score" class="font-display text-5xl sm:text-6xl mb-6">0</div>
-      <ul id="final-words" class="flex flex-wrap gap-2 justify-center text-sm mb-8"></ul>
+
+      <div id="final-words-section" class="mb-6">
+        <h3 class="text-xs uppercase tracking-widest mb-2 text-left" style="color: var(--color-feedback-success);">Words You Found</h3>
+        <ul id="final-words" class="flex flex-wrap gap-2 text-sm"></ul>
+      </div>
+
+      <div id="rejected-words-section" class="mb-6 hidden">
+        <h3 class="text-xs uppercase tracking-widest mb-2 text-left" style="color: var(--color-feedback-danger);">Misses</h3>
+        <ul id="rejected-words" class="flex flex-col gap-1 text-sm text-left"></ul>
+      </div>
+
+      <div id="best-word-section" class="mb-8 panel px-4 py-3" style="background: var(--color-surface-input);">
+        <h3 class="text-xs uppercase tracking-widest mb-1" style="color: var(--color-gold-400);">Optimal Anagram</h3>
+        <div id="best-word" class="font-display text-2xl tracking-wide"></div>
+      </div>
+
       <button
         id="play-again"
         onclick="document.getElementById('new-round').click()"

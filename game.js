@@ -4,6 +4,95 @@
 const ROUND_SECONDS = 30;
 const TILE_COUNT = 9;
 
+// ---- Audio engine ----
+// Synthesizes all sound effects with the Web Audio API — no audio files.
+// A single AudioContext is created lazily on first user gesture (required
+// by browser autoplay policy) and reused for every subsequent sound.
+
+const AudioEngine = (() => {
+  let ctx = null;
+  let muted = localStorage.getItem("anagrammatica-muted") === "true";
+
+  function getContext() {
+    if (!ctx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      ctx = new Ctx();
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+
+  // A single oscillator voice with an ADSR-ish gain envelope.
+  function playTone({ freq, start = 0, duration = 0.12, type = "sine", peak = 0.25, endFreq = null }) {
+    if (muted) return;
+    const audioCtx = getContext();
+    const t0 = audioCtx.currentTime + start;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (endFreq !== null) {
+      osc.frequency.exponentialRampToValueAtTime(Math.max(endFreq, 1), t0 + duration);
+    }
+
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(peak, t0 + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + duration + 0.02);
+  }
+
+  return {
+    // High-pitched mechanical blip when a letter lands on a tile.
+    tileFlip() {
+      playTone({ freq: 1400, duration: 0.06, type: "square", peak: 0.12, endFreq: 900 });
+    },
+
+    // Low woodblock-style tick, played once per second during the round.
+    // `urgent` (final 5 seconds) uses a higher pitch and slightly sharper decay.
+    tick(urgent) {
+      playTone({
+        freq: urgent ? 520 : 340,
+        duration: urgent ? 0.05 : 0.07,
+        type: "square",
+        peak: urgent ? 0.22 : 0.15,
+        endFreq: urgent ? 300 : 200,
+      });
+    },
+
+    // Ascending arcade-style chime for an accepted word.
+    successChime() {
+      const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+      notes.forEach((freq, i) => {
+        playTone({ freq, start: i * 0.07, duration: 0.18, type: "triangle", peak: 0.2 });
+      });
+    },
+
+    // Low, discordant buzzer for an invalid word or round timeout.
+    buzzer() {
+      playTone({ freq: 110, duration: 0.35, type: "sawtooth", peak: 0.2, endFreq: 70 });
+      playTone({ freq: 116, duration: 0.35, type: "sawtooth", peak: 0.15, endFreq: 74 });
+    },
+
+    isMuted() {
+      return muted;
+    },
+
+    setMuted(value) {
+      muted = value;
+      localStorage.setItem("anagrammatica-muted", String(muted));
+    },
+
+    toggleMuted() {
+      this.setMuted(!muted);
+      return muted;
+    },
+  };
+})();
+
 // Authentic tile-bag distribution (mirrors real English letter frequency,
 // modeled on the classic Countdown letters set). Counts are the total
 // number of physical tiles of that letter in the bag for one round.
@@ -24,6 +113,32 @@ const LENGTH_SCORES = {
 
 function scoreForWord(word) {
   return LENGTH_SCORES[word.length] || 0;
+}
+
+// Can `word` be spelled using only the letters in `tiles` (respecting
+// each letter's available count)? Shared by submission validation and
+// the best-possible-word search.
+function canFormFromTiles(word, tiles) {
+  const available = tiles.map((t) => t.toLowerCase()).slice();
+  for (const ch of word) {
+    const idx = available.indexOf(ch);
+    if (idx === -1) return false;
+    available.splice(idx, 1);
+  }
+  return true;
+}
+
+// Finds the longest dictionary word formable from this tile pool —
+// the "optimal anagram" shown in the round review. Ties are broken by
+// first match in WORDS. O(dictionary size), fine for a few thousand words.
+function findLongestWord(tiles) {
+  let best = null;
+  for (const word of WORDS) {
+    if (word.length > tiles.length) continue;
+    if (best && word.length <= best.length) continue;
+    if (canFormFromTiles(word, tiles)) best = word;
+  }
+  return best;
 }
 
 function buildBag(pool) {
@@ -49,6 +164,7 @@ const GameState = {
   roundActive: false,
   score: 0,
   foundWords: [],
+  rejectedWords: [],
 
   listeners: {
     onTilesChanged: null,
@@ -67,6 +183,7 @@ const GameState = {
     this.roundActive = false;
     this.score = 0;
     this.foundWords = [];
+    this.rejectedWords = [];
     this.stopTimer();
     this._emit("onTilesChanged", this.tiles);
   },
@@ -117,7 +234,14 @@ const GameState = {
   endRound() {
     this.stopTimer();
     this.roundActive = false;
-    this._emit("onRoundEnd", { score: this.score, words: this.foundWords });
+    const bestWord = findLongestWord(this.tiles);
+    this._emit("onRoundEnd", {
+      score: this.score,
+      words: this.foundWords,
+      rejected: this.rejectedWords,
+      bestWord,
+      tiles: this.tiles.slice(),
+    });
   },
 
   stopTimer() {
@@ -130,46 +254,23 @@ const GameState = {
   submitWord(rawWord) {
     const word = (rawWord || "").trim().toLowerCase();
 
-    if (!this.roundActive) {
-      this._emit("onWordRejected", { word, reason: "round-not-active" });
-      return { ok: false, reason: "round-not-active" };
-    }
+    const reject = (reason) => {
+      this.rejectedWords.push({ word, reason });
+      this._emit("onWordRejected", { word, reason });
+      return { ok: false, reason };
+    };
 
-    if (word.length < 3) {
-      this._emit("onWordRejected", { word, reason: "too-short" });
-      return { ok: false, reason: "too-short" };
-    }
-
-    if (this.foundWords.includes(word)) {
-      this._emit("onWordRejected", { word, reason: "duplicate" });
-      return { ok: false, reason: "duplicate" };
-    }
-
-    if (!this._canFormFromTiles(word)) {
-      this._emit("onWordRejected", { word, reason: "not-in-tiles" });
-      return { ok: false, reason: "not-in-tiles" };
-    }
-
-    if (!isValidWord(word)) {
-      this._emit("onWordRejected", { word, reason: "not-a-word" });
-      return { ok: false, reason: "not-a-word" };
-    }
+    if (!this.roundActive) return reject("round-not-active");
+    if (word.length < 3) return reject("too-short");
+    if (this.foundWords.includes(word)) return reject("duplicate");
+    if (!canFormFromTiles(word, this.tiles)) return reject("not-in-tiles");
+    if (!isValidWord(word)) return reject("not-a-word");
 
     const points = scoreForWord(word);
     this.score += points;
     this.foundWords.push(word);
     this._emit("onWordAccepted", { word, points, total: this.score });
     return { ok: true, points, total: this.score };
-  },
-
-  _canFormFromTiles(word) {
-    const available = this.tiles.map((t) => t.toLowerCase()).slice();
-    for (const ch of word) {
-      const idx = available.indexOf(ch);
-      if (idx === -1) return false;
-      available.splice(idx, 1);
-    }
-    return true;
   },
 
   on(event, handler) {
@@ -189,6 +290,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const vowelBtn = document.getElementById("pick-vowel");
   const consonantBtn = document.getElementById("pick-consonant");
   const timerEl = document.getElementById("timer");
+  const timerBarEl = document.getElementById("timer-bar");
   const scoreEl = document.getElementById("score");
   const wordInput = document.getElementById("word-input");
   const submitBtn = document.getElementById("submit-word");
@@ -198,6 +300,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const resultsPanel = document.getElementById("results-panel");
   const finalScoreEl = document.getElementById("final-score");
   const finalWordsEl = document.getElementById("final-words");
+  const rejectedSectionEl = document.getElementById("rejected-words-section");
+  const rejectedListEl = document.getElementById("rejected-words");
+  const bestWordEl = document.getElementById("best-word");
+  const muteToggleBtn = document.getElementById("mute-toggle");
+  const muteIconEl = document.getElementById("mute-icon");
+
+  const REJECTION_MESSAGES = {
+    "too-short": "Too short (min. 3 letters)",
+    duplicate: "Already found this word",
+    "not-in-tiles": "Used letters not on the board",
+    "not-a-word": "Word not in dictionary",
+    "round-not-active": "Round wasn't active",
+  };
+
+  let lastTileCount = 0;
 
   function renderTiles() {
     tileEls.forEach((el, i) => {
@@ -205,15 +322,41 @@ document.addEventListener("DOMContentLoaded", () => {
       el.textContent = letter || "";
       el.classList.toggle("tile-filled", Boolean(letter));
     });
+    if (GameState.tiles.length > lastTileCount) {
+      AudioEngine.tileFlip();
+    }
+    lastTileCount = GameState.tiles.length;
     const remaining = TILE_COUNT - GameState.tiles.length;
     if (vowelBtn) vowelBtn.disabled = remaining === 0 || GameState.vowelBag.length === 0;
     if (consonantBtn) consonantBtn.disabled = remaining === 0 || GameState.consonantBag.length === 0;
   }
 
+  let lastRenderedTime = ROUND_SECONDS;
+
   function renderTimer(t) {
-    if (!timerEl) return;
-    timerEl.textContent = String(Math.max(t, 0)).padStart(2, "0");
-    timerEl.classList.toggle("timer-warning", t <= 10 && t > 0);
+    const clamped = Math.max(t, 0);
+    if (timerEl) {
+      timerEl.textContent = String(clamped).padStart(2, "0");
+      timerEl.classList.toggle("timer-warning", t <= 5 && t > 0);
+    }
+    if (timerBarEl) {
+      const pct = (clamped / ROUND_SECONDS) * 100;
+      timerBarEl.style.width = pct + "%";
+      timerBarEl.classList.remove("timer-bar-green", "timer-bar-amber", "timer-bar-red");
+      if (t <= 5) {
+        timerBarEl.classList.add("timer-bar-red");
+      } else if (t <= 15) {
+        timerBarEl.classList.add("timer-bar-amber");
+      } else {
+        timerBarEl.classList.add("timer-bar-green");
+      }
+    }
+    // Only tick on a genuine countdown decrement — skips the initial
+    // emission when the round starts and the reset call before it.
+    if (t < lastRenderedTime && t >= 0) {
+      AudioEngine.tick(t <= 5);
+    }
+    lastRenderedTime = t;
   }
 
   function renderScore() {
@@ -249,6 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
   GameState.on("onTimerTick", renderTimer);
 
   GameState.on("onWordAccepted", ({ word, points }) => {
+    AudioEngine.successChime();
     renderScore();
     renderFoundWords();
     renderFeedback(`"${word.toUpperCase()}" accepted +${points}`, "good");
@@ -256,30 +400,62 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   GameState.on("onWordRejected", ({ word, reason }) => {
-    const messages = {
-      "too-short": "Words must be at least 3 letters.",
-      duplicate: "Already found that word.",
-      "not-in-tiles": "That word isn't in your tiles.",
-      "not-a-word": "Not in the dictionary.",
-      "round-not-active": "Pick all 9 tiles to start the round.",
-    };
-    renderFeedback(messages[reason] || "Invalid word.", "bad");
+    AudioEngine.buzzer();
+    renderFeedback(REJECTION_MESSAGES[reason] || "Invalid word.", "bad");
   });
 
-  GameState.on("onRoundEnd", ({ score, words }) => {
+  GameState.on("onRoundEnd", ({ score, words, rejected, bestWord }) => {
+    AudioEngine.buzzer();
     if (wordInput) wordInput.disabled = true;
     if (submitBtn) submitBtn.disabled = true;
     if (vowelBtn) vowelBtn.disabled = true;
     if (consonantBtn) consonantBtn.disabled = true;
     if (resultsPanel) resultsPanel.classList.remove("hidden");
     if (finalScoreEl) finalScoreEl.textContent = String(score);
+
     if (finalWordsEl) {
       finalWordsEl.innerHTML = "";
-      words.forEach((w) => {
+      if (words.length === 0) {
         const li = document.createElement("li");
-        li.textContent = `${w.toUpperCase()} (+${scoreForWord(w)})`;
+        li.textContent = "No words found this round.";
+        li.style.opacity = "0.6";
         finalWordsEl.appendChild(li);
-      });
+      } else {
+        words.forEach((w) => {
+          const li = document.createElement("li");
+          li.textContent = `${w.toUpperCase()} (+${scoreForWord(w)})`;
+          finalWordsEl.appendChild(li);
+        });
+      }
+    }
+
+    // De-dupe rejection reasons per word so a repeatedly-mistyped word
+    // doesn't spam the review with identical lines.
+    const seen = new Set();
+    const uniqueRejections = (rejected || []).filter(({ word, reason }) => {
+      const key = word + "|" + reason;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (rejectedSectionEl && rejectedListEl) {
+      rejectedListEl.innerHTML = "";
+      if (uniqueRejections.length === 0) {
+        rejectedSectionEl.classList.add("hidden");
+      } else {
+        rejectedSectionEl.classList.remove("hidden");
+        uniqueRejections.forEach(({ word, reason }) => {
+          const li = document.createElement("li");
+          const label = word ? word.toUpperCase() : "(blank)";
+          li.textContent = `${label} — ${REJECTION_MESSAGES[reason] || "Invalid"}`;
+          rejectedListEl.appendChild(li);
+        });
+      }
+    }
+
+    if (bestWordEl) {
+      bestWordEl.textContent = bestWord ? bestWord.toUpperCase() : "None found";
     }
   });
 
@@ -290,6 +466,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (vowelBtn) vowelBtn.addEventListener("click", () => handlePick("vowel"));
   if (consonantBtn) consonantBtn.addEventListener("click", () => handlePick("consonant"));
+
+  document.addEventListener("keydown", (e) => {
+    // Don't hijack V/C while the player is typing a word.
+    if (document.activeElement === wordInput) return;
+    if (e.key.toLowerCase() === "v" && !vowelBtn.disabled) {
+      e.preventDefault();
+      handlePick("vowel");
+    } else if (e.key.toLowerCase() === "c" && !consonantBtn.disabled) {
+      e.preventDefault();
+      handlePick("consonant");
+    }
+  });
 
   function handleSubmit() {
     if (!wordInput) return;
@@ -310,6 +498,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function startNewRound() {
     GameState.newRound();
     renderTiles();
+    if (timerEl) timerEl.classList.remove("timer-warning");
     renderTimer(ROUND_SECONDS);
     renderScore();
     renderFoundWords();
@@ -323,6 +512,23 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (newRoundBtn) newRoundBtn.addEventListener("click", startNewRound);
+
+  function renderMuteState() {
+    const muted = AudioEngine.isMuted();
+    if (muteToggleBtn) {
+      muteToggleBtn.setAttribute("aria-pressed", String(muted));
+      muteToggleBtn.setAttribute("aria-label", muted ? "Unmute sound" : "Mute sound");
+    }
+    if (muteIconEl) muteIconEl.textContent = muted ? "🔇" : "🔊";
+  }
+
+  if (muteToggleBtn) {
+    muteToggleBtn.addEventListener("click", () => {
+      AudioEngine.toggleMuted();
+      renderMuteState();
+    });
+  }
+  renderMuteState();
 
   startNewRound();
 });

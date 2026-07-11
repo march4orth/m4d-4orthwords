@@ -28,6 +28,7 @@
   --color-flame-400: #ff6b4a;
   --color-mint-400:  #7cf5a0;
   --color-rose-400:  #ff6b6b;
+  --color-amber-400: #ffb84d;
 
   /* Base */
   --color-white: #ffffff;
@@ -73,6 +74,10 @@
   --color-feedback-danger:  var(--color-rose-400);
   --color-feedback-warning: var(--color-flame-400);
 
+  --color-timer-safe:     var(--color-mint-400);
+  --color-timer-caution:  var(--color-amber-400);
+  --color-timer-critical: var(--color-flame-400);
+
   /* ─── Tier 3: Components ──────────────────────────────────────────────── */
 
   --tile-bg-empty:     var(--color-navy-900);
@@ -97,4 +102,12 @@
   --chip-bg:     rgba(245, 184, 0, 0.12);
   --chip-border: rgba(245, 184, 0, 0.4);
   --chip-text:   var(--color-gold-400);
+
+  --chip-miss-bg:     rgba(255, 107, 107, 0.1);
+  --chip-miss-border: rgba(255, 107, 107, 0.35);
+  --chip-miss-text:   var(--color-rose-400);
+
+  --timer-track-bg:     var(--color-navy-950);
+  --timer-track-border: var(--color-navy-600);
+  --timer-bar-transition: width 1s linear, background-color var(--motion-duration-fast) ease;
 }
