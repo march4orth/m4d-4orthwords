@@ -1,7 +1,7 @@
 // Core state engine for 4orthwords.
 // Depends on WORDS / isValidWord from words.js (loaded first in index.html).
 
-const ROUND_SECONDS = 30;
+const ROUND_SECONDS = 60;
 const TILE_COUNT = 9;
 
 // ---- Audio engine ----
