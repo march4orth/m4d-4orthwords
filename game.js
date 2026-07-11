@@ -352,6 +352,36 @@ const GameState = {
     return letter;
   },
 
+  // Instantly fills every remaining slot with a realistic vowel/consonant
+  // mix (targets ~4-in-9 vowels overall, like a typical Countdown board),
+  // respecting whatever's already been picked and each bag's remaining
+  // supply. Returns the letters added, in draw order.
+  autoFillRemaining() {
+    const added = [];
+    // A real Countdown board typically runs 3-6 vowels out of 9 — pick a
+    // target per fill (not a hard-coded 4) so boards vary naturally
+    // instead of always converging on the exact same split.
+    const targetVowels = 3 + Math.floor(Math.random() * 4); // 3..6
+    while (this.canPick()) {
+      const vowelsSoFar = this.tiles.filter((l) => "AEIOU".includes(l)).length;
+      const slotsLeft = TILE_COUNT - this.tiles.length;
+      const vowelsStillNeeded = Math.max(targetVowels - vowelsSoFar, 0);
+      // Weighted coin flip: favor vowels only up to the target, and only
+      // if there's actually room left to still hit it.
+      const wantVowel =
+        vowelsStillNeeded > 0 && (vowelsStillNeeded >= slotsLeft || Math.random() < vowelsStillNeeded / slotsLeft);
+
+      let letter = wantVowel ? drawFrom(this.vowelBag) : drawFrom(this.consonantBag);
+      // Fall back to whichever bag still has letters if the preferred one is empty.
+      if (!letter) letter = drawFrom(this.vowelBag) || drawFrom(this.consonantBag);
+      if (!letter) break;
+
+      this._addTile(letter);
+      added.push(letter);
+    }
+    return added;
+  },
+
   _addTile(letter) {
     this.tiles.push(letter);
     this._emit("onTilesChanged", this.tiles);
@@ -435,8 +465,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const tileEls = Array.from(document.querySelectorAll("[data-tile-slot]"));
   const vowelBtn = document.getElementById("pick-vowel");
   const consonantBtn = document.getElementById("pick-consonant");
+  const autoFillBtn = document.getElementById("auto-fill");
   const timerEl = document.getElementById("timer");
-  const timerBarEl = document.getElementById("timer-bar");
+  const timerRingEl = document.getElementById("timer-ring-progress");
+  const TIMER_RING_CIRCUMFERENCE = 263.9;
   const scoreEl = document.getElementById("score");
   const wordInput = document.getElementById("word-input");
   const submitBtn = document.getElementById("submit-word");
@@ -496,6 +528,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const remaining = TILE_COUNT - GameState.tiles.length;
     if (vowelBtn) vowelBtn.disabled = remaining === 0 || GameState.vowelBag.length === 0;
     if (consonantBtn) consonantBtn.disabled = remaining === 0 || GameState.consonantBag.length === 0;
+    if (autoFillBtn) autoFillBtn.disabled = remaining === 0;
   }
 
   let lastRenderedTime = ROUND_SECONDS;
@@ -506,16 +539,15 @@ document.addEventListener("DOMContentLoaded", () => {
       timerEl.textContent = String(clamped).padStart(2, "0");
       timerEl.classList.toggle("timer-warning", t <= 5 && t > 0);
     }
-    if (timerBarEl) {
-      const pct = (clamped / ROUND_SECONDS) * 100;
-      timerBarEl.style.width = pct + "%";
-      timerBarEl.classList.remove("timer-bar-green", "timer-bar-amber", "timer-bar-red");
+    if (timerRingEl) {
+      const fraction = clamped / ROUND_SECONDS;
+      const offset = TIMER_RING_CIRCUMFERENCE * (1 - fraction);
+      timerRingEl.style.strokeDashoffset = String(offset);
+      timerRingEl.classList.remove("timer-ring-amber", "timer-ring-red");
       if (t <= 5) {
-        timerBarEl.classList.add("timer-bar-red");
+        timerRingEl.classList.add("timer-ring-red");
       } else if (t <= 15) {
-        timerBarEl.classList.add("timer-bar-amber");
-      } else {
-        timerBarEl.classList.add("timer-bar-green");
+        timerRingEl.classList.add("timer-ring-amber");
       }
     }
     // Only tick on a genuine countdown decrement — skips the initial
@@ -644,6 +676,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if (vowelBtn) vowelBtn.addEventListener("click", () => handlePick("vowel"));
   if (consonantBtn) consonantBtn.addEventListener("click", () => handlePick("consonant"));
 
+  if (autoFillBtn) {
+    autoFillBtn.addEventListener("click", () => {
+      GameState.autoFillRemaining();
+    });
+  }
+
   document.addEventListener("keydown", (e) => {
     // Don't hijack V/C while the player is typing a word or a modal is open.
     if (document.activeElement === wordInput) return;
@@ -726,6 +764,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function startRound(mode) {
     if (mode === "daily" && Stats.hasPlayedDailyToday()) {
+      if (resultsPanel) resultsPanel.classList.add("hidden");
       showDailyLocked();
       return;
     }

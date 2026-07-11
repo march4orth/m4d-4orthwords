@@ -136,10 +136,72 @@ body {
   border-color: var(--color-border-focus);
 }
 
-#timer {
+.timer-ring-wrap {
+  position: relative;
+  width: 4.25rem;
+  height: 4.25rem;
+}
+
+@media (min-width: 640px) {
+  .timer-ring-wrap {
+    width: 5.25rem;
+    height: 5.25rem;
+  }
+}
+
+.timer-ring {
+  width: 100%;
+  height: 100%;
+  /* Start the depleting arc at 12 o'clock and sweep clockwise. */
+  transform: rotate(-90deg);
+}
+
+.timer-ring-track {
+  fill: none;
+  stroke: var(--timer-track-bg);
+  stroke-width: 8;
+}
+
+.timer-ring-progress {
+  fill: none;
+  stroke: var(--color-timer-safe);
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-dasharray: 263.9;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 1s linear, stroke var(--motion-duration-fast) ease;
+}
+
+.timer-ring-progress.timer-ring-amber {
+  stroke: var(--color-timer-caution);
+}
+
+.timer-ring-progress.timer-ring-red {
+  stroke: var(--color-timer-critical);
+  animation: timer-ring-flash 0.5s ease-in-out infinite;
+}
+
+@keyframes timer-ring-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.timer-ring-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-family-display);
+  font-size: 1.35rem;
   color: var(--color-gold-400);
   text-shadow: 0 0 8px rgba(255, 212, 94, 0.5);
+}
+
+@media (min-width: 640px) {
+  .timer-ring-value {
+    font-size: 1.6rem;
+  }
 }
 
 .timer-warning {
@@ -158,40 +220,6 @@ body {
   42%  { transform: scale(1.14); }
   60%  { transform: scale(1); }
   100% { transform: scale(1); }
-}
-
-.timer-track {
-  width: 100%;
-  height: 6px;
-  background: var(--timer-track-bg);
-  border: 1px solid var(--timer-track-border);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.timer-bar {
-  height: 100%;
-  width: 100%;
-  border-radius: var(--radius-full);
-  transition: var(--timer-bar-transition);
-}
-
-.timer-bar-green {
-  background: var(--color-timer-safe);
-}
-
-.timer-bar-amber {
-  background: var(--color-timer-caution);
-}
-
-.timer-bar-red {
-  background: var(--color-timer-critical);
-  animation: timer-bar-flash 0.5s ease-in-out infinite;
-}
-
-@keyframes timer-bar-flash {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
 }
 
 .feedback-info {
