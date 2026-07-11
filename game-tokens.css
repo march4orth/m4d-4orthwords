@@ -1,0 +1,99 @@
+/**
+ * Anagrammatica — Compiled Token Output
+ * Same three-tier architecture as m4d-design-system/05-code/tokens
+ * (primitives → semantic → component), themed for this game's
+ * retro game-show aesthetic instead of the core brand's purple/teal.
+ * Components consume Tier 3 (or Tier 2 directly); never hardcode hex
+ * in styles.css — add a tier here instead.
+ */
+
+/* ─── Tier 1: Primitives ────────────────────────────────────────────────── */
+:root {
+
+  /* Navy */
+  --color-navy-950: #050b2e;
+  --color-navy-900: #0a1550;
+  --color-navy-800: #0f1e6b;
+  --color-navy-700: #152a8c;
+  --color-navy-600: #1c3aa8;
+
+  /* Gold */
+  --color-gold-400: #ffd45e;
+  --color-gold-500: #f5b800;
+  --color-gold-600: #e09400;
+  --color-gold-800: #b57500;
+  --color-gold-900: #3a2500;
+
+  /* Feedback accents */
+  --color-flame-400: #ff6b4a;
+  --color-mint-400:  #7cf5a0;
+  --color-rose-400:  #ff6b6b;
+
+  /* Base */
+  --color-white: #ffffff;
+
+  /* Spacing (mirrors core system's scale) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+
+  /* Radius */
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-full: 9999px;
+
+  /* Font */
+  --font-family-display: Georgia, Cambria, serif;
+
+  /* Motion */
+  --motion-duration-fast: 150ms;
+  --motion-duration-tile-pop: 250ms;
+  --motion-easing-state-change: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ─── Tier 2: Semantic ────────────────────────────────────────────────── */
+
+  --color-surface-page:    var(--color-navy-950);
+  --color-surface-panel:   var(--color-navy-900);
+  --color-surface-input:   var(--color-navy-900);
+  --color-surface-overlay: rgba(5, 11, 46, 0.9);
+
+  --color-text-primary:  var(--color-white);
+  --color-text-onpanel:  var(--color-gold-400);
+  --color-text-muted:    rgba(255, 255, 255, 0.6);
+
+  --color-border-panel: var(--color-gold-500);
+  --color-border-input: var(--color-navy-700);
+  --color-border-focus: var(--color-gold-500);
+
+  --color-feedback-info:    var(--color-text-muted);
+  --color-feedback-success: var(--color-mint-400);
+  --color-feedback-danger:  var(--color-rose-400);
+  --color-feedback-warning: var(--color-flame-400);
+
+  /* ─── Tier 3: Components ──────────────────────────────────────────────── */
+
+  --tile-bg-empty:     var(--color-navy-900);
+  --tile-bg-filled:    linear-gradient(180deg, #fff2c9 0%, var(--color-gold-500) 100%);
+  --tile-border-empty: var(--color-navy-600);
+  --tile-border-filled: var(--color-gold-600);
+  --tile-text:         var(--color-navy-950);
+
+  --panel-bg:     linear-gradient(180deg, var(--color-navy-800) 0%, var(--color-navy-900) 100%);
+  --panel-border: var(--color-border-panel);
+  --panel-radius: var(--radius-lg);
+
+  --button-gold-bg:     linear-gradient(180deg, var(--color-gold-400) 0%, var(--color-gold-500) 100%);
+  --button-gold-text:   var(--color-gold-900);
+  --button-gold-border: var(--color-gold-800);
+
+  --button-navy-bg:       linear-gradient(180deg, #223aa0 0%, var(--color-navy-700) 100%);
+  --button-navy-bg-hover: linear-gradient(180deg, #2c47b8 0%, #1a34a0 100%);
+  --button-navy-text:     var(--color-gold-400);
+  --button-navy-border:   var(--color-gold-400);
+
+  --chip-bg:     rgba(245, 184, 0, 0.12);
+  --chip-border: rgba(245, 184, 0, 0.4);
+  --chip-text:   var(--color-gold-400);
+}
