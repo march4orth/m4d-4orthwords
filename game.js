@@ -1,4 +1,4 @@
-// Core state engine for Anagrammatica.
+// Core state engine for 4orthwords.
 // Depends on WORDS / isValidWord from words.js (loaded first in index.html).
 
 const ROUND_SECONDS = 30;
@@ -11,7 +11,7 @@ const TILE_COUNT = 9;
 
 const AudioEngine = (() => {
   let ctx = null;
-  let muted = localStorage.getItem("anagrammatica-muted") === "true";
+  let muted = localStorage.getItem("4orthwords-muted") === "true";
 
   function getContext() {
     if (!ctx) {
@@ -83,7 +83,7 @@ const AudioEngine = (() => {
 
     setMuted(value) {
       muted = value;
-      localStorage.setItem("anagrammatica-muted", String(muted));
+      localStorage.setItem("4orthwords-muted", String(muted));
     },
 
     toggleMuted() {
@@ -305,6 +305,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const bestWordEl = document.getElementById("best-word");
   const muteToggleBtn = document.getElementById("mute-toggle");
   const muteIconEl = document.getElementById("mute-icon");
+  const helpToggleBtn = document.getElementById("help-toggle");
+  const helpCloseBtn = document.getElementById("help-close");
+  const helpPanel = document.getElementById("help-panel");
 
   const REJECTION_MESSAGES = {
     "too-short": "Too short (min. 3 letters)",
@@ -385,6 +388,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (wordInput) {
       wordInput.disabled = false;
       wordInput.focus();
+      // Guarantee the input (and thus the keyboard's target) stays on
+      // screen — mobile browsers don't always auto-scroll a focused
+      // field clear of the virtual keyboard on their own.
+      wordInput.scrollIntoView({ block: "center", behavior: "smooth" });
     }
     if (submitBtn) submitBtn.disabled = false;
   });
@@ -468,8 +475,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (consonantBtn) consonantBtn.addEventListener("click", () => handlePick("consonant"));
 
   document.addEventListener("keydown", (e) => {
-    // Don't hijack V/C while the player is typing a word.
+    // Don't hijack V/C while the player is typing a word or a modal is open.
     if (document.activeElement === wordInput) return;
+    if (helpPanel && !helpPanel.classList.contains("hidden")) return;
     if (e.key.toLowerCase() === "v" && !vowelBtn.disabled) {
       e.preventDefault();
       handlePick("vowel");
@@ -529,6 +537,27 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   renderMuteState();
+
+  function openHelp() {
+    if (helpPanel) helpPanel.classList.remove("hidden");
+  }
+
+  function closeHelp() {
+    if (helpPanel) helpPanel.classList.add("hidden");
+  }
+
+  if (helpToggleBtn) helpToggleBtn.addEventListener("click", openHelp);
+  if (helpCloseBtn) helpCloseBtn.addEventListener("click", closeHelp);
+  if (helpPanel) {
+    helpPanel.addEventListener("click", (e) => {
+      if (e.target === helpPanel) closeHelp();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && helpPanel && !helpPanel.classList.contains("hidden")) {
+      closeHelp();
+    }
+  });
 
   startNewRound();
 });

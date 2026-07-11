@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Anagrammatica</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>4orthwords</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -11,21 +11,32 @@
   <link rel="stylesheet" href="game-tokens.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="min-h-screen flex flex-col items-center py-6 px-3 sm:py-8 sm:px-4" style="background: var(--color-surface-page); color: var(--color-text-primary); font-family: var(--font-family-body);">
+<body class="flex flex-col items-center py-6 px-3 sm:py-8 sm:px-4" style="min-height: 100svh; background: var(--color-surface-page); color: var(--color-text-primary); font-family: var(--font-family-body);">
 
-  <button
-    id="mute-toggle"
-    type="button"
-    aria-label="Mute sound"
-    aria-pressed="false"
-    class="mute-toggle"
-  >
-    <span id="mute-icon" aria-hidden="true">🔊</span>
-  </button>
+  <div class="corner-controls">
+    <button
+      id="help-toggle"
+      type="button"
+      aria-label="How to play"
+      aria-haspopup="dialog"
+      class="corner-icon-btn"
+    >
+      <span aria-hidden="true">?</span>
+    </button>
+    <button
+      id="mute-toggle"
+      type="button"
+      aria-label="Mute sound"
+      aria-pressed="false"
+      class="corner-icon-btn"
+    >
+      <span id="mute-icon" aria-hidden="true">🔊</span>
+    </button>
+  </div>
 
   <header class="text-center mb-6 sm:mb-8 px-2">
     <h1 class="text-3xl sm:text-5xl md:text-6xl tracking-wide title-glow leading-tight">
-      ANAGRAMMATICA
+      4ORTHWORDS
     </h1>
     <p class="mt-2 uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[0.65rem] sm:text-sm" style="color: var(--color-text-onpanel); opacity: 0.8;">
       Nine Letters. Thirty Seconds. One Word.
@@ -57,7 +68,7 @@
 
     <!-- Tile board -->
     <section class="w-full panel px-3 py-5 sm:px-6 sm:py-8">
-      <div class="grid grid-cols-9 gap-1 sm:gap-3 mb-6 sm:mb-8">
+      <div class="tile-board grid grid-cols-9 gap-1 sm:gap-3 mb-6 sm:mb-8">
         <div data-tile-slot class="tile"></div>
         <div data-tile-slot class="tile"></div>
         <div data-tile-slot class="tile"></div>
@@ -116,6 +127,62 @@
     </section>
 
   </main>
+
+  <!-- How to Play overlay -->
+  <div
+    id="help-panel"
+    class="hidden fixed inset-0 backdrop-blur-sm flex items-center justify-center px-4 py-8 z-50 overflow-y-auto"
+    style="background: var(--color-surface-overlay);"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="help-title"
+  >
+    <div class="panel px-5 py-8 sm:px-8 sm:py-10 max-w-md w-full my-auto text-left relative">
+      <button
+        id="help-close"
+        type="button"
+        aria-label="Close"
+        class="corner-icon-btn help-close-btn"
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
+
+      <h2 id="help-title" class="font-display text-2xl sm:text-3xl mb-5 text-center" style="color: var(--color-gold-400);">How to Play</h2>
+
+      <ol class="flex flex-col gap-4 text-sm leading-relaxed">
+        <li>
+          <strong style="color: var(--color-gold-400);">1. Pick 9 letters.</strong>
+          Choose <strong>Vowel</strong> or <strong>Consonant</strong> nine times
+          (or press <kbd class="key-hint">V</kbd> / <kbd class="key-hint">C</kbd>) to fill the board.
+        </li>
+        <li>
+          <strong style="color: var(--color-gold-400);">2. Beat the clock.</strong>
+          The instant your 9th letter lands, a 30-second round begins automatically.
+        </li>
+        <li>
+          <strong style="color: var(--color-gold-400);">3. Enter words.</strong>
+          Type any word (3+ letters) using only the letters on the board, then press
+          <kbd class="key-hint">Enter</kbd>. Find as many as you can before time runs out.
+        </li>
+        <li>
+          <strong style="color: var(--color-gold-400);">4. Longer scores more.</strong>
+          Points escalate with word length — a 9-letter word is worth far more than a 3-letter one.
+        </li>
+        <li>
+          <strong style="color: var(--color-gold-400);">5. Review the round.</strong>
+          When time's up, see your score, why any misses didn't count, and the single
+          longest word possible from that letter set.
+        </li>
+      </ol>
+
+      <button
+        onclick="document.getElementById('help-close').click()"
+        class="btn-gold w-full mt-6 px-6 py-3 rounded-full font-bold uppercase tracking-wide"
+      >
+        Got It
+      </button>
+    </div>
+  </div>
 
   <!-- Round Review overlay -->
   <div
