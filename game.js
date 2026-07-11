@@ -141,6 +141,18 @@ function findLongestWord(tiles) {
   return best;
 }
 
+// Every dictionary word formable from this tile pool, longest first. Used
+// to build the CPU opponent's pool of "known" answers for a given board.
+function findAllWords(tiles) {
+  const found = [];
+  for (const word of WORDS) {
+    if (word.length > tiles.length) continue;
+    if (canFormFromTiles(word, tiles)) found.push(word);
+  }
+  found.sort((a, b) => b.length - a.length);
+  return found;
+}
+
 function buildBag(pool) {
   const bag = [];
   for (const [letter, count] of Object.entries(pool)) {
@@ -282,6 +294,86 @@ const Stats = (() => {
       }
 
       save();
+    },
+  };
+})();
+
+// ---- CPU opponent (1v1 mode) ----
+// Simulates a human-paced opponent searching the SAME tile pool as the
+// player: it "knows" a random subset of the words that are actually
+// findable on that board (skewed toward shorter/easier words, like a
+// real player), then reveals them at staggered, randomized intervals
+// across the round instead of all at once.
+
+const CpuOpponent = (() => {
+  let timers = [];
+  let score = 0;
+  let words = [];
+
+  function weightForLength(len) {
+    // Shorter words are far more likely to be "known" than longer ones —
+    // mirrors how a human opponent finds several 3-4 letter words easily
+    // but rarely stumbles on the 8-9 letter ones.
+    if (len <= 4) return 0.55;
+    if (len <= 6) return 0.3;
+    return 0.12;
+  }
+
+  function planWords(tiles) {
+    const candidates = findAllWords(tiles);
+    const chosen = [];
+    for (const word of candidates) {
+      if (Math.random() < weightForLength(word.length)) chosen.push(word);
+    }
+    // Cap how many the CPU can realistically report in one round so it
+    // doesn't try to cram in 40 words back to back.
+    return chosen.slice(0, 10);
+  }
+
+  return {
+    // `onFound(word, points, totalScore)` fires each time the CPU "finds"
+    // a word, staggered across `durationSeconds`. `onDone()` fires once
+    // all its scheduled finds have played out.
+    start(tiles, durationSeconds, onFound, onDone) {
+      this.stop();
+      score = 0;
+      words = [];
+      const plan = planWords(tiles);
+
+      plan.forEach((word) => {
+        // Stagger finds across the first ~85% of the round — leaves a
+        // believable "no more finds" tail near the end, like a person
+        // slowing down as they run out of ideas.
+        const delayMs = (0.05 + Math.random() * 0.8) * durationSeconds * 1000;
+        const timer = setTimeout(() => {
+          const points = scoreForWord(word);
+          score += points;
+          words.push(word);
+          onFound(word, points, score);
+        }, delayMs);
+        timers.push(timer);
+      });
+
+      const doneTimer = setTimeout(() => onDone(), durationSeconds * 1000 + 50);
+      timers.push(doneTimer);
+    },
+
+    stop() {
+      timers.forEach((t) => clearTimeout(t));
+      timers = [];
+    },
+
+    getScore() {
+      return score;
+    },
+
+    getWords() {
+      return words.slice();
+    },
+
+    getLongestWord() {
+      if (words.length === 0) return null;
+      return words.reduce((best, w) => (w.length > best.length ? w : best), words[0]);
     },
   };
 })();
@@ -470,7 +562,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const timerRingEl = document.getElementById("timer-ring-progress");
   const TIMER_RING_CIRCUMFERENCE = 263.9;
   const scoreEl = document.getElementById("score");
-  const wordInput = document.getElementById("word-input");
+  const wordStagingEl = document.getElementById("word-staging");
+  const clearWordBtn = document.getElementById("clear-word");
   const submitBtn = document.getElementById("submit-word");
   const foundListEl = document.getElementById("found-words");
   const feedbackEl = document.getElementById("feedback");
@@ -489,6 +582,23 @@ document.addEventListener("DOMContentLoaded", () => {
   const modeSelectEl = document.getElementById("mode-select");
   const modePracticeBtn = document.getElementById("mode-practice");
   const modeDailyBtn = document.getElementById("mode-daily");
+  const modeVsCpuBtn = document.getElementById("mode-vs-cpu");
+  const matchStatusEl = document.getElementById("match-status");
+  const matchRoundLabelEl = document.getElementById("match-round-label");
+  const matchPlayerScoreEl = document.getElementById("match-player-score");
+  const matchCpuScoreEl = document.getElementById("match-cpu-score");
+  const matchRoundPanel = document.getElementById("match-round-panel");
+  const matchRoundTitleEl = document.getElementById("match-round-title");
+  const matchRoundPlayerScoreEl = document.getElementById("match-round-player-score");
+  const matchRoundCpuScoreEl = document.getElementById("match-round-cpu-score");
+  const matchRoundVerdictEl = document.getElementById("match-round-verdict");
+  const matchRoundContinueBtn = document.getElementById("match-round-continue");
+  const matchSummaryPanel = document.getElementById("match-summary-panel");
+  const matchSummaryTitleEl = document.getElementById("match-summary-title");
+  const matchSummaryPlayerScoreEl = document.getElementById("match-summary-player-score");
+  const matchSummaryCpuScoreEl = document.getElementById("match-summary-cpu-score");
+  const matchSummaryRoundsEl = document.getElementById("match-summary-rounds");
+  const matchPlayAgainBtn = document.getElementById("match-play-again");
   const scoreboardEl = document.getElementById("scoreboard");
   const gameplaySectionsEl = document.getElementById("gameplay-sections");
   const dailyLockedNoticeEl = document.getElementById("daily-locked-notice");
@@ -580,16 +690,84 @@ document.addEventListener("DOMContentLoaded", () => {
 
   GameState.on("onTilesChanged", renderTiles);
 
-  GameState.on("onBoardFull", () => {
-    if (wordInput) {
-      wordInput.disabled = false;
-      wordInput.focus();
-      // Guarantee the input (and thus the keyboard's target) stays on
-      // screen — mobile browsers don't always auto-scroll a focused
-      // field clear of the virtual keyboard on their own.
-      wordInput.scrollIntoView({ block: "center", behavior: "smooth" });
+  // Tap-to-build word entry: `selectedIndices` holds board-tile indices in
+  // the order they were tapped (not letters — since duplicate letters can
+  // appear on the board, each physical tile can only be used once per word).
+  let selectedIndices = [];
+
+  function currentStagedWord() {
+    return selectedIndices.map((i) => GameState.tiles[i]).join("").toLowerCase();
+  }
+
+  function renderStaging() {
+    if (!wordStagingEl) return;
+    wordStagingEl.innerHTML = "";
+    if (selectedIndices.length === 0) {
+      wordStagingEl.classList.add("word-staging-empty");
+      wordStagingEl.textContent = wordStagingEl.dataset.emptyText || "";
+    } else {
+      wordStagingEl.classList.remove("word-staging-empty");
+      selectedIndices.forEach((tileIndex) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "staged-letter";
+        chip.textContent = GameState.tiles[tileIndex];
+        chip.addEventListener("click", () => deselectTileByPosition(tileIndex));
+        wordStagingEl.appendChild(chip);
+      });
     }
-    if (submitBtn) submitBtn.disabled = false;
+
+    tileEls.forEach((el, i) => {
+      el.classList.toggle("tile-selected", selectedIndices.includes(i));
+    });
+
+    const hasLetters = selectedIndices.length > 0;
+    if (clearWordBtn) clearWordBtn.disabled = !hasLetters;
+    if (submitBtn) submitBtn.disabled = !hasLetters || !GameState.roundActive;
+  }
+
+  // Removes one occurrence of this exact board position from the staged
+  // word (used when tapping a staged chip to undo just that letter).
+  function deselectTileByPosition(tileIndex) {
+    const pos = selectedIndices.lastIndexOf(tileIndex);
+    if (pos !== -1) selectedIndices.splice(pos, 1);
+    renderStaging();
+  }
+
+  function clearStaging() {
+    selectedIndices = [];
+    renderStaging();
+  }
+
+  function handleTileTap(index) {
+    if (!GameState.roundActive) return;
+    if (!GameState.tiles[index]) return; // empty slot, nothing to tap yet
+    if (selectedIndices.includes(index)) {
+      deselectTileByPosition(index);
+      return;
+    }
+    selectedIndices.push(index);
+    renderStaging();
+  }
+
+  tileEls.forEach((el, i) => {
+    el.addEventListener("click", () => handleTileTap(i));
+  });
+
+  GameState.on("onBoardFull", (tiles) => {
+    clearStaging();
+    if (submitBtn) submitBtn.disabled = true;
+
+    if (GameState.mode === "vs-cpu") {
+      CpuOpponent.start(
+        tiles,
+        ROUND_SECONDS,
+        (word, points, total) => {
+          if (matchCpuScoreEl) matchCpuScoreEl.textContent = String(Match.cpuTotal + total);
+        },
+        () => {}
+      );
+    }
   });
 
   GameState.on("onTimerTick", renderTimer);
@@ -599,7 +777,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderScore();
     renderFoundWords();
     renderFeedback(`"${word.toUpperCase()}" accepted +${points}`, "good");
-    if (wordInput) wordInput.value = "";
+    clearStaging();
   });
 
   GameState.on("onWordRejected", ({ word, reason }) => {
@@ -611,10 +789,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   GameState.on("onRoundEnd", ({ score, words, rejected, bestWord, tiles, timeLeft, mode }) => {
     AudioEngine.buzzer();
-    if (wordInput) wordInput.disabled = true;
+    clearStaging();
     if (submitBtn) submitBtn.disabled = true;
     if (vowelBtn) vowelBtn.disabled = true;
     if (consonantBtn) consonantBtn.disabled = true;
+
+    if (mode === "vs-cpu") {
+      handleMatchRoundEnd(score, words);
+      return;
+    }
+
     if (resultsPanel) resultsPanel.classList.remove("hidden");
     if (finalScoreEl) finalScoreEl.textContent = String(score);
 
@@ -683,36 +867,40 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   document.addEventListener("keydown", (e) => {
-    // Don't hijack V/C while the player is typing a word or a modal is open.
-    if (document.activeElement === wordInput) return;
+    // Don't hijack shortcuts while a modal is open.
     if (helpPanel && !helpPanel.classList.contains("hidden")) return;
+    if (statsPanel && !statsPanel.classList.contains("hidden")) return;
+
     if (e.key.toLowerCase() === "v" && !vowelBtn.disabled) {
       e.preventDefault();
       handlePick("vowel");
     } else if (e.key.toLowerCase() === "c" && !consonantBtn.disabled) {
       e.preventDefault();
       handlePick("consonant");
+    } else if (e.key === "Enter" && !submitBtn.disabled) {
+      e.preventDefault();
+      handleSubmit();
+    } else if (e.key === "Backspace" && selectedIndices.length > 0) {
+      e.preventDefault();
+      deselectTileByPosition(selectedIndices[selectedIndices.length - 1]);
     }
   });
 
   function handleSubmit() {
-    if (!wordInput) return;
-    GameState.submitWord(wordInput.value);
-    wordInput.focus();
+    GameState.submitWord(currentStagedWord());
   }
 
   if (submitBtn) submitBtn.addEventListener("click", handleSubmit);
-  if (wordInput) {
-    wordInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        handleSubmit();
-      }
-    });
-  }
+  if (clearWordBtn) clearWordBtn.addEventListener("click", clearStaging);
 
   function showModeSelect() {
     if (resultsPanel) resultsPanel.classList.add("hidden");
+    if (matchRoundPanel) matchRoundPanel.classList.add("hidden");
+    if (matchSummaryPanel) matchSummaryPanel.classList.add("hidden");
+    if (matchStatusEl) matchStatusEl.classList.add("hidden");
+    CpuOpponent.stop();
+    Match.active = false;
+
     if (Stats.hasPlayedDailyToday()) {
       showDailyLocked();
       return;
@@ -762,16 +950,161 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // ---- 1v1 vs CPU match state ----
+  const MATCH_ROUNDS = 3;
+  const Match = {
+    active: false,
+    round: 0, // 1-indexed while a match is in progress
+    playerTotal: 0,
+    cpuTotal: 0,
+    history: [], // { playerScore, cpuScore, playerLongest, cpuLongest }
+
+    start() {
+      this.active = true;
+      this.round = 1;
+      this.playerTotal = 0;
+      this.cpuTotal = 0;
+      this.history = [];
+    },
+
+    recordRound(playerScore, playerWords, cpuScore, cpuWords) {
+      const playerLongest = playerWords.reduce((best, w) => (w.length > (best?.length || 0) ? w : best), null);
+      const cpuLongest = cpuWords.reduce((best, w) => (w.length > (best?.length || 0) ? w : best), null);
+      this.playerTotal += playerScore;
+      this.cpuTotal += cpuScore;
+      this.history.push({ playerScore, cpuScore, playerLongest, cpuLongest });
+    },
+
+    isLastRound() {
+      return this.round >= MATCH_ROUNDS;
+    },
+
+    advance() {
+      this.round += 1;
+    },
+
+    // Winner across the whole match: highest cumulative score; if tied,
+    // whoever's single longest word (across all rounds) was longer.
+    winner() {
+      if (this.playerTotal > this.cpuTotal) return "player";
+      if (this.cpuTotal > this.playerTotal) return "cpu";
+      const longestOf = (key) =>
+        this.history.reduce((best, r) => {
+          const w = r[key];
+          return w && w.length > (best?.length || 0) ? w : best;
+        }, null);
+      const playerLongest = longestOf("playerLongest");
+      const cpuLongest = longestOf("cpuLongest");
+      const pLen = playerLongest ? playerLongest.length : 0;
+      const cLen = cpuLongest ? cpuLongest.length : 0;
+      if (pLen > cLen) return "player";
+      if (cLen > pLen) return "cpu";
+      return "tie";
+    },
+  };
+
+  function renderMatchStatus() {
+    if (matchRoundLabelEl) matchRoundLabelEl.textContent = `${Match.round} / ${MATCH_ROUNDS}`;
+    if (matchPlayerScoreEl) matchPlayerScoreEl.textContent = String(Match.playerTotal);
+    if (matchCpuScoreEl) matchCpuScoreEl.textContent = String(Match.cpuTotal);
+  }
+
+  function handleMatchRoundEnd(playerScore, playerWords) {
+    // The CPU's simulated finds are scheduled across the full round
+    // duration, so by the time the timer hits zero it has already
+    // finished — stop() here is just a safety net.
+    CpuOpponent.stop();
+    const cpuScore = CpuOpponent.getScore();
+    const cpuWords = CpuOpponent.getWords();
+
+    Match.recordRound(playerScore, playerWords, cpuScore, cpuWords);
+
+    if (matchRoundTitleEl) matchRoundTitleEl.textContent = `Round ${Match.round} Complete`;
+    if (matchRoundPlayerScoreEl) matchRoundPlayerScoreEl.textContent = String(playerScore);
+    if (matchRoundCpuScoreEl) matchRoundCpuScoreEl.textContent = String(cpuScore);
+    if (matchRoundVerdictEl) {
+      if (playerScore > cpuScore) {
+        matchRoundVerdictEl.textContent = "You took this round!";
+      } else if (cpuScore > playerScore) {
+        matchRoundVerdictEl.textContent = "CPU takes this round.";
+      } else {
+        matchRoundVerdictEl.textContent = "This round is tied.";
+      }
+    }
+    if (matchRoundContinueBtn) {
+      matchRoundContinueBtn.textContent = Match.isLastRound() ? "See Result" : "Next Round";
+    }
+
+    renderMatchStatus();
+    if (matchRoundPanel) matchRoundPanel.classList.remove("hidden");
+  }
+
+  function renderMatchSummary() {
+    const winner = Match.winner();
+    if (matchSummaryTitleEl) {
+      matchSummaryTitleEl.textContent =
+        winner === "player" ? "You Win!" : winner === "cpu" ? "CPU Wins" : "It's a Tie!";
+    }
+    if (matchSummaryPlayerScoreEl) matchSummaryPlayerScoreEl.textContent = String(Match.playerTotal);
+    if (matchSummaryCpuScoreEl) matchSummaryCpuScoreEl.textContent = String(Match.cpuTotal);
+
+    if (matchSummaryRoundsEl) {
+      matchSummaryRoundsEl.innerHTML = "";
+      Match.history.forEach((r, i) => {
+        const row = document.createElement("div");
+        row.className = "flex justify-between panel px-3 py-2";
+        row.style.background = "var(--color-surface-input)";
+        row.innerHTML = `<span>Round ${i + 1}</span><span>${r.playerScore} — ${r.cpuScore}</span>`;
+        matchSummaryRoundsEl.appendChild(row);
+      });
+    }
+
+    if (matchRoundPanel) matchRoundPanel.classList.add("hidden");
+    if (matchSummaryPanel) matchSummaryPanel.classList.remove("hidden");
+  }
+
+  if (matchRoundContinueBtn) {
+    matchRoundContinueBtn.addEventListener("click", () => {
+      if (matchRoundPanel) matchRoundPanel.classList.add("hidden");
+      if (Match.isLastRound()) {
+        renderMatchSummary();
+      } else {
+        Match.advance();
+        startRound("vs-cpu");
+      }
+    });
+  }
+
+  if (matchPlayAgainBtn) {
+    matchPlayAgainBtn.addEventListener("click", () => {
+      if (matchSummaryPanel) matchSummaryPanel.classList.add("hidden");
+      Match.active = false;
+      startRound("vs-cpu");
+    });
+  }
+
   function startRound(mode) {
     if (mode === "daily" && Stats.hasPlayedDailyToday()) {
       if (resultsPanel) resultsPanel.classList.add("hidden");
       showDailyLocked();
       return;
     }
+    if (mode === "vs-cpu" && !Match.active) Match.start();
+
     if (modeSelectEl) modeSelectEl.classList.add("hidden");
     if (dailyLockedNoticeEl) dailyLockedNoticeEl.classList.add("hidden");
-    if (scoreboardEl) scoreboardEl.classList.remove("hidden");
+    if (matchRoundPanel) matchRoundPanel.classList.add("hidden");
+    if (matchSummaryPanel) matchSummaryPanel.classList.add("hidden");
     if (gameplaySectionsEl) gameplaySectionsEl.classList.remove("hidden");
+
+    if (mode === "vs-cpu") {
+      if (scoreboardEl) scoreboardEl.classList.add("hidden");
+      if (matchStatusEl) matchStatusEl.classList.remove("hidden");
+      renderMatchStatus();
+    } else {
+      if (matchStatusEl) matchStatusEl.classList.add("hidden");
+      if (scoreboardEl) scoreboardEl.classList.remove("hidden");
+    }
 
     GameState.newRound(mode);
     renderTiles();
@@ -779,20 +1112,23 @@ document.addEventListener("DOMContentLoaded", () => {
     renderTimer(ROUND_SECONDS);
     renderScore();
     renderFoundWords();
-    renderFeedback(
-      mode === "daily" ? "Daily Challenge — pick 9 letters to begin." : "Pick 9 letters to begin.",
-      "info"
-    );
-    if (wordInput) {
-      wordInput.value = "";
-      wordInput.disabled = true;
+
+    if (mode === "vs-cpu") {
+      renderFeedback(`Round ${Match.round} of ${MATCH_ROUNDS} — pick 9 letters to begin.`, "info");
+    } else {
+      renderFeedback(
+        mode === "daily" ? "Daily Challenge — pick 9 letters to begin." : "Pick 9 letters to begin.",
+        "info"
+      );
     }
+    clearStaging();
     if (submitBtn) submitBtn.disabled = true;
     if (resultsPanel) resultsPanel.classList.add("hidden");
   }
 
   if (modePracticeBtn) modePracticeBtn.addEventListener("click", () => startRound("practice"));
   if (modeDailyBtn) modeDailyBtn.addEventListener("click", () => startRound("daily"));
+  if (modeVsCpuBtn) modeVsCpuBtn.addEventListener("click", () => startRound("vs-cpu"));
 
   // "Change Mode" (scoreboard) always returns to mode-select, respecting
   // today's daily lock if the player switches back to Daily.
