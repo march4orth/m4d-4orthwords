@@ -5,7 +5,12 @@ body {
   background: radial-gradient(ellipse at top, var(--color-navy-800) 0%, var(--color-surface-page) 60%);
 }
 
+.font-display {
+  font-family: var(--font-family-display);
+}
+
 .title-glow {
+  font-family: var(--font-family-display);
   color: var(--color-gold-400);
   text-shadow:
     0 0 10px rgba(255, 212, 94, 0.6),
@@ -23,13 +28,14 @@ body {
 }
 
 .tile {
-  width: 2.75rem;
-  height: 3.25rem;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-family: var(--font-family-display);
+  font-size: clamp(0.85rem, 5vw, 1.875rem);
   color: var(--tile-text);
   background: var(--tile-bg-filled);
   border: 2px solid var(--tile-border-filled);
@@ -39,14 +45,6 @@ body {
     0 3px 0 var(--color-gold-800),
     0 4px 6px rgba(0, 0, 0, 0.3);
   transition: transform var(--motion-duration-fast) ease, box-shadow var(--motion-duration-fast) ease;
-}
-
-@media (min-width: 640px) {
-  .tile {
-    width: 3.5rem;
-    height: 4rem;
-    font-size: 1.875rem;
-  }
 }
 
 .tile:empty {
@@ -129,6 +127,7 @@ body {
 }
 
 #timer {
+  font-family: var(--font-family-display);
   color: var(--color-gold-400);
   text-shadow: 0 0 8px rgba(255, 212, 94, 0.5);
 }

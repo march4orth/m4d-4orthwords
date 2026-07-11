@@ -45,7 +45,8 @@
   --radius-full: 9999px;
 
   /* Font */
-  --font-family-display: Georgia, Cambria, serif;
+  --font-family-body:    'Space Grotesk', system-ui, sans-serif;
+  --font-family-display: 'Bungee', 'Space Grotesk', system-ui, sans-serif;
 
   /* Motion */
   --motion-duration-fast: 150ms;

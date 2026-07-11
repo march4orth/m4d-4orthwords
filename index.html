@@ -4,17 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Anagrammatica</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="game-tokens.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="min-h-screen flex flex-col items-center py-8 px-4" style="background: var(--color-surface-page); color: var(--color-text-primary); font-family: var(--font-family-display);">
+<body class="min-h-screen flex flex-col items-center py-6 px-3 sm:py-8 sm:px-4" style="background: var(--color-surface-page); color: var(--color-text-primary); font-family: var(--font-family-body);">
 
-  <header class="text-center mb-8">
-    <h1 class="text-5xl sm:text-6xl font-bold tracking-wide title-glow">
+  <header class="text-center mb-6 sm:mb-8 px-2">
+    <h1 class="text-3xl sm:text-5xl md:text-6xl tracking-wide title-glow leading-tight">
       ANAGRAMMATICA
     </h1>
-    <p class="mt-2 uppercase tracking-[0.3em] text-xs sm:text-sm" style="color: var(--color-text-onpanel); opacity: 0.8;">
+    <p class="mt-2 uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[0.65rem] sm:text-sm" style="color: var(--color-text-onpanel); opacity: 0.8;">
       Nine Letters. Thirty Seconds. One Word.
     </p>
   </header>
@@ -22,26 +25,26 @@
   <main class="w-full max-w-3xl flex flex-col items-center gap-6">
 
     <!-- Scoreboard -->
-    <section class="w-full flex justify-between items-center panel px-6 py-4">
+    <section class="w-full flex justify-between items-center gap-2 panel px-3 py-3 sm:px-6 sm:py-4">
       <div class="text-center">
-        <div class="text-xs uppercase tracking-widest" style="color: var(--color-text-onpanel); opacity: 0.7;">Score</div>
-        <div id="score" class="text-3xl font-bold" style="color: var(--color-gold-400);">0</div>
+        <div class="text-[0.65rem] sm:text-xs uppercase tracking-widest" style="color: var(--color-text-onpanel); opacity: 0.7;">Score</div>
+        <div id="score" class="font-display text-2xl sm:text-3xl" style="color: var(--color-gold-400);">0</div>
       </div>
       <div class="text-center">
-        <div class="text-xs uppercase tracking-widest" style="color: var(--color-text-onpanel); opacity: 0.7;">Time</div>
-        <div id="timer" class="text-4xl font-bold tabular-nums">30</div>
+        <div class="text-[0.65rem] sm:text-xs uppercase tracking-widest" style="color: var(--color-text-onpanel); opacity: 0.7;">Time</div>
+        <div id="timer" class="text-3xl sm:text-4xl tabular-nums">30</div>
       </div>
       <button
         id="new-round"
-        class="btn-gold px-4 py-2 rounded-full text-sm font-semibold uppercase tracking-wide"
+        class="btn-gold px-3 py-2 sm:px-4 rounded-full text-xs sm:text-sm font-semibold uppercase tracking-wide whitespace-nowrap"
       >
         New Round
       </button>
     </section>
 
     <!-- Tile board -->
-    <section class="w-full panel px-6 py-8">
-      <div class="grid grid-cols-9 gap-2 sm:gap-3 mb-8 justify-items-center">
+    <section class="w-full panel px-3 py-5 sm:px-6 sm:py-8">
+      <div class="grid grid-cols-9 gap-1 sm:gap-3 mb-6 sm:mb-8">
         <div data-tile-slot class="tile"></div>
         <div data-tile-slot class="tile"></div>
         <div data-tile-slot class="tile"></div>
@@ -53,16 +56,16 @@
         <div data-tile-slot class="tile"></div>
       </div>
 
-      <div class="flex justify-center gap-4">
+      <div class="flex justify-center gap-2 sm:gap-4">
         <button
           id="pick-vowel"
-          class="btn-navy px-8 py-3 rounded-lg text-lg font-bold uppercase tracking-wide"
+          class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
         >
           Vowel
         </button>
         <button
           id="pick-consonant"
-          class="btn-navy px-8 py-3 rounded-lg text-lg font-bold uppercase tracking-wide"
+          class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
         >
           Consonant
         </button>
@@ -70,8 +73,8 @@
     </section>
 
     <!-- Word entry -->
-    <section class="w-full panel px-6 py-6">
-      <div class="flex gap-3">
+    <section class="w-full panel px-3 py-4 sm:px-6 sm:py-6">
+      <div class="flex gap-2 sm:gap-3">
         <input
           id="word-input"
           type="text"
@@ -80,12 +83,12 @@
           spellcheck="false"
           disabled
           placeholder="Pick 9 letters to begin..."
-          class="word-input flex-1 border-2 rounded-lg px-4 py-3 text-xl tracking-widest uppercase outline-none transition-colors disabled:opacity-50"
+          class="word-input min-w-0 flex-1 border-2 rounded-lg px-3 py-3 sm:px-4 text-base sm:text-xl tracking-widest uppercase outline-none transition-colors disabled:opacity-50"
         />
         <button
           id="submit-word"
           disabled
-          class="btn-gold px-6 py-3 rounded-lg font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed"
+          class="btn-gold px-4 sm:px-6 py-3 rounded-lg font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
         >
           Enter
         </button>
@@ -94,7 +97,7 @@
     </section>
 
     <!-- Found words -->
-    <section class="w-full panel px-6 py-6">
+    <section class="w-full panel px-3 py-4 sm:px-6 sm:py-6">
       <h2 class="uppercase tracking-widest text-xs mb-3" style="color: var(--color-gold-400);">Words Found</h2>
       <ul id="found-words" class="flex flex-wrap gap-2 text-sm"></ul>
     </section>
@@ -107,15 +110,15 @@
     class="hidden fixed inset-0 backdrop-blur-sm flex items-center justify-center px-4 z-50"
     style="background: var(--color-surface-overlay);"
   >
-    <div class="panel px-8 py-10 max-w-md w-full text-center">
-      <h2 class="text-3xl font-bold mb-2" style="color: var(--color-gold-400);">Time's Up!</h2>
+    <div class="panel px-5 py-8 sm:px-8 sm:py-10 max-w-md w-full text-center">
+      <h2 class="font-display text-2xl sm:text-3xl mb-2" style="color: var(--color-gold-400);">Time's Up!</h2>
       <p class="text-sm uppercase tracking-widest mb-6" style="color: var(--color-text-muted);">Final Score</p>
-      <div id="final-score" class="text-6xl font-bold mb-6">0</div>
+      <div id="final-score" class="font-display text-5xl sm:text-6xl mb-6">0</div>
       <ul id="final-words" class="flex flex-wrap gap-2 justify-center text-sm mb-8"></ul>
       <button
         id="play-again"
         onclick="document.getElementById('new-round').click()"
-        class="btn-gold px-8 py-3 rounded-full font-bold uppercase tracking-wide"
+        class="btn-gold px-6 sm:px-8 py-3 rounded-full font-bold uppercase tracking-wide"
       >
         Play Again
       </button>
