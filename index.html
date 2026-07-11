@@ -13,28 +13,7 @@
 </head>
 <body class="flex flex-col items-center py-6 px-3 sm:py-8 sm:px-4" style="min-height: 100svh; background: var(--color-surface-page); color: var(--color-text-primary); font-family: var(--font-family-body);">
 
-  <div class="corner-controls">
-    <button
-      id="help-toggle"
-      type="button"
-      aria-label="How to play"
-      aria-haspopup="dialog"
-      class="corner-icon-btn"
-    >
-      <span aria-hidden="true">?</span>
-    </button>
-    <button
-      id="mute-toggle"
-      type="button"
-      aria-label="Mute sound"
-      aria-pressed="false"
-      class="corner-icon-btn"
-    >
-      <span id="mute-icon" aria-hidden="true">🔊</span>
-    </button>
-  </div>
-
-  <header class="text-center mb-6 sm:mb-8 px-16 sm:px-20 pt-14 sm:pt-0">
+  <header class="text-center mb-6 sm:mb-8 px-2">
     <h1 class="text-3xl sm:text-5xl md:text-6xl tracking-wide title-glow leading-tight">
       4ORTHWORDS
     </h1>
@@ -43,7 +22,7 @@
     </p>
   </header>
 
-  <main class="w-full max-w-3xl flex flex-col items-center gap-6">
+  <main class="w-full max-w-3xl flex flex-col items-center gap-6 pb-16 sm:pb-4">
 
     <!-- Scoreboard -->
     <section class="w-full flex justify-between items-center gap-2 panel px-3 py-3 sm:px-6 sm:py-4">
@@ -218,6 +197,27 @@
         Play Again
       </button>
     </div>
+  </div>
+
+  <div class="corner-controls">
+    <button
+      id="help-toggle"
+      type="button"
+      aria-label="How to play"
+      aria-haspopup="dialog"
+      class="corner-icon-btn"
+    >
+      <span aria-hidden="true">?</span>
+    </button>
+    <button
+      id="mute-toggle"
+      type="button"
+      aria-label="Mute sound"
+      aria-pressed="false"
+      class="corner-icon-btn"
+    >
+      <span id="mute-icon" aria-hidden="true">🔊</span>
+    </button>
   </div>
 
   <script src="words.js"></script>
