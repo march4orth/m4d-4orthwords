@@ -390,6 +390,7 @@ const GameState = {
   rejectedWords: [],
   mode: "practice", // "practice" | "daily"
   dailySeedDate: null,
+  pendingStart: false,
 
   listeners: {
     onTilesChanged: null,
@@ -421,7 +422,41 @@ const GameState = {
     this.foundWords = [];
     this.rejectedWords = [];
     this.stopTimer();
+
+    // Daily Challenge is worldwide and meant to be identical for every
+    // player, so the 9 letters are drawn for them (deterministically, via
+    // the seeded `rng` above) instead of being manually picked. The board
+    // fills immediately but `pendingStart` holds off the timer/round-active
+    // flip until the player explicitly clicks Start — the UI keeps the
+    // tiles hidden until then so nobody gets untimed thinking time.
+    if (mode === "daily") {
+      this.pendingStart = true;
+      this._fillAllSeeded(rng);
+    } else {
+      this.pendingStart = false;
+    }
+
     this._emit("onTilesChanged", this.tiles);
+  },
+
+  // Fills all 9 tiles deterministically from the seeded bags, mirroring
+  // autoFillRemaining()'s realistic vowel/consonant mix (targets 3-6 vowels
+  // out of 9) but driven entirely by `rng` instead of Math.random(), so
+  // every player gets the identical split for the same calendar date.
+  _fillAllSeeded(rng) {
+    const targetVowels = 3 + Math.floor(rng() * 4); // 3..6
+    while (this.tiles.length < TILE_COUNT) {
+      const vowelsSoFar = this.tiles.filter((l) => "AEIOU".includes(l)).length;
+      const slotsLeft = TILE_COUNT - this.tiles.length;
+      const vowelsStillNeeded = Math.max(targetVowels - vowelsSoFar, 0);
+      const wantVowel = vowelsStillNeeded > 0 && (vowelsStillNeeded >= slotsLeft || rng() < vowelsStillNeeded / slotsLeft);
+
+      let letter = wantVowel ? drawFrom(this.vowelBag) : drawFrom(this.consonantBag);
+      if (!letter) letter = drawFrom(this.vowelBag) || drawFrom(this.consonantBag);
+      if (!letter) break;
+
+      this.tiles.push(letter);
+    }
   },
 
   canPick() {
@@ -477,10 +512,20 @@ const GameState = {
   _addTile(letter) {
     this.tiles.push(letter);
     this._emit("onTilesChanged", this.tiles);
-    if (this.tiles.length === TILE_COUNT) {
+    if (this.tiles.length === TILE_COUNT && !this.pendingStart) {
       this._emit("onBoardFull", this.tiles);
       this.startRound();
     }
+  },
+
+  // Daily Challenge's board fills instantly (see _fillAllSeeded) but waits
+  // for an explicit player action before the timer starts, so the UI can
+  // keep the letters hidden until the player is ready.
+  beginPendingRound() {
+    if (!this.pendingStart) return;
+    this.pendingStart = false;
+    this._emit("onBoardFull", this.tiles);
+    this.startRound();
   },
 
   startRound() {
@@ -558,6 +603,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const vowelBtn = document.getElementById("pick-vowel");
   const consonantBtn = document.getElementById("pick-consonant");
   const autoFillBtn = document.getElementById("auto-fill");
+  const pickingControlsEl = document.getElementById("picking-controls");
+  const dailyStartControlsEl = document.getElementById("daily-start-controls");
+  const dailyStartBtn = document.getElementById("daily-start");
   const timerEl = document.getElementById("timer");
   const timerRingEl = document.getElementById("timer-ring-progress");
   const TIMER_RING_CIRCUMFERENCE = 263.9;
@@ -644,13 +692,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderTiles() {
+    // Daily Challenge's letters are pre-drawn for the player (see
+    // GameState._fillAllSeeded) but stay face-down until they click Start,
+    // so nobody gets untimed thinking time on a puzzle everyone shares.
+    const hideLetters = GameState.pendingStart;
     tileEls.forEach((el, slot) => {
       const tileIndex = displayOrder[slot];
       const letter = GameState.tiles[tileIndex];
-      el.textContent = letter || "";
-      el.classList.toggle("tile-filled", Boolean(letter));
+      el.textContent = hideLetters ? "" : letter || "";
+      el.classList.toggle("tile-filled", Boolean(letter) && !hideLetters);
+      el.classList.toggle("tile-hidden", Boolean(letter) && hideLetters);
     });
-    if (GameState.tiles.length > lastTileCount) {
+    if (!GameState.pendingStart && GameState.tiles.length > lastTileCount) {
       AudioEngine.tileFlip();
     }
     lastTileCount = GameState.tiles.length;
@@ -658,7 +711,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (vowelBtn) vowelBtn.disabled = remaining === 0 || GameState.vowelBag.length === 0;
     if (consonantBtn) consonantBtn.disabled = remaining === 0 || GameState.consonantBag.length === 0;
     if (autoFillBtn) autoFillBtn.disabled = remaining === 0;
-    if (shuffleBoardBtn) shuffleBoardBtn.disabled = GameState.tiles.length === 0;
+    if (shuffleBoardBtn) shuffleBoardBtn.disabled = GameState.tiles.length === 0 || GameState.pendingStart;
+
+    if (pickingControlsEl) pickingControlsEl.classList.toggle("hidden", GameState.mode === "daily");
+    if (dailyStartControlsEl) dailyStartControlsEl.classList.toggle("hidden", GameState.mode !== "daily" || !GameState.pendingStart);
   }
 
   let lastRenderedTime = ROUND_SECONDS;
@@ -913,6 +969,14 @@ document.addEventListener("DOMContentLoaded", () => {
   if (autoFillBtn) {
     autoFillBtn.addEventListener("click", () => {
       GameState.autoFillRemaining();
+    });
+  }
+
+  if (dailyStartBtn) {
+    dailyStartBtn.addEventListener("click", () => {
+      GameState.beginPendingRound();
+      renderTiles();
+      renderFeedback("Go! Find as many words as you can.", "info");
     });
   }
 
@@ -1210,11 +1274,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (mode === "vs-cpu") {
       renderFeedback(`Round ${Match.round} of ${MATCH_ROUNDS} — pick 9 letters to begin.`, "info");
+    } else if (mode === "daily") {
+      renderFeedback("Today's 9 letters are set — click Start when you're ready.", "info");
     } else {
-      renderFeedback(
-        mode === "daily" ? "Daily Challenge — pick 9 letters to begin." : "Pick 9 letters to begin.",
-        "info"
-      );
+      renderFeedback("Pick 9 letters to begin.", "info");
     }
     clearStaging();
     if (submitBtn) submitBtn.disabled = true;

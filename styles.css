@@ -84,6 +84,21 @@ body {
   animation: tile-flip-pop var(--motion-duration-tile-pop) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Daily Challenge: letters are drawn immediately but kept face-down until
+   the player clicks Start, so nobody gets untimed thinking time on a board
+   everyone else in the world sees identically. */
+.tile.tile-hidden {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--tile-bg-filled),
+    var(--tile-bg-filled) 6px,
+    var(--tile-border-filled) 6px,
+    var(--tile-border-filled) 12px
+  );
+  border: 2.5px solid var(--tile-border-filled);
+  cursor: default;
+}
+
 @keyframes tile-flip-pop {
   0% {
     transform: scale(0.7) rotateY(-100deg);

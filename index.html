@@ -126,26 +126,36 @@
           <div data-tile-slot class="tile"></div>
         </div>
 
-        <div class="flex justify-center gap-2 sm:gap-4 mb-3">
-          <button
-            id="pick-vowel"
-            class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
-          >
-            Vowel
-          </button>
-          <button
-            id="pick-consonant"
-            class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
-          >
-            Consonant
-          </button>
+        <div id="picking-controls">
+          <div class="flex justify-center gap-2 sm:gap-4 mb-3">
+            <button
+              id="pick-vowel"
+              class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
+            >
+              Vowel
+            </button>
+            <button
+              id="pick-consonant"
+              class="btn-navy flex-1 sm:flex-none px-3 sm:px-8 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
+            >
+              Consonant
+            </button>
+          </div>
+          <div class="flex justify-center">
+            <button
+              id="auto-fill"
+              class="btn-gold px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold uppercase tracking-wide"
+            >
+              Auto-Fill Remaining
+            </button>
+          </div>
         </div>
-        <div class="flex justify-center">
+        <div id="daily-start-controls" class="hidden flex justify-center">
           <button
-            id="auto-fill"
-            class="btn-gold px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold uppercase tracking-wide"
+            id="daily-start"
+            class="btn-gold px-6 sm:px-10 py-3 rounded-lg text-sm sm:text-lg font-bold uppercase tracking-wide"
           >
-            Auto-Fill Remaining
+            Start Round
           </button>
         </div>
       </section>
